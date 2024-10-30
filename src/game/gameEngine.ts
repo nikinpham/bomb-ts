@@ -1,7 +1,7 @@
-import { JoinGameState } from "../interfaces";
+import { IJoinGameState } from "../interfaces";
 
 class GameEngine {
-  static start(res: JoinGameState) {
+  static start(res: IJoinGameState) {
     console.log("[GAME_PLAY]: Start", res);
   }
   static stop() {

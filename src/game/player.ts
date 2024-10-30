@@ -1,6 +1,6 @@
 class Player {
-  private position: Position;
-  constructor(position: Position) {
+  private position: TPosition;
+  constructor(position: TPosition) {
     this.position = position;
   }
 
