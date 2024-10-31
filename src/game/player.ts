@@ -5,7 +5,7 @@ class Player {
   }
 
   updatePosition() {
-    this.position.x += 1;
+    this.position.row += 1;
   }
 }
 

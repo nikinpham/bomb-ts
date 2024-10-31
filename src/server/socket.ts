@@ -5,6 +5,7 @@ import GameEngine from "../game/gameEngine";
 dotenv.config();
 
 const SOCKET_URL = process.env.SOCKET_URL || "http://localhost";
+
 const socket: Socket = ClientIO(SOCKET_URL, {
   transports: ["websocket"],
   reconnection: true,

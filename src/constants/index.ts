@@ -1,10 +1,10 @@
-export const TAG = {};
+export const TAGS = {};
 
-export const BLOCK_TYPE = {
+export const BLOCKS = {
   ROAD: 0,
   WALL: 1,
-  WOOD: 2,
-  TELEPORT: 3,
+  BALK: 2,
+  TELEPORT_GATE: 3,
   QUARANTINE_AREA: 4,
   DRAGON_EGG: 5,
   MYSTIC: 6,

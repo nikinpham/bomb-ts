@@ -1,15 +1,24 @@
 declare type TPosition = {
-  x: number;
-  y: number;
+  row: number;
+  col: number;
 };
 declare type TDirections = [number, number, string][];
 
 declare type TMaps = number[][];
 
 declare type TSpoil = {
-  rows: number;
+  row: number;
   col: number;
   spoil_type: number;
 };
 
-declare type TSpoils = Spoil[];
+declare type TSpoils = TSpoil[];
+
+declare type TBomb = {
+  row: number;
+  col: number;
+  remain_time: number;
+  playerId: string;
+};
+
+declare type TBombs = TBomb[];
