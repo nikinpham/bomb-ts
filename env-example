@@ -1,0 +1,4 @@
+SOCKET_URL = "http://localhost"
+PORT = 3000
+GAME_ID = ""
+PLAYER_ID = "player1_xxx"

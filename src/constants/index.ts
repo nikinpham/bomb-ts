@@ -7,12 +7,18 @@ export const BLOCKS = {
   TELEPORT_GATE: 3,
   QUARANTINE_AREA: 4,
   DRAGON_EGG: 5,
-  MYSTIC: 6,
+  MYSTIC: 6
 };
 
+// 1 - Move LEFT
+// 2 - Move RIGHT.
+// 3 - Move UP
+// 4 - Move DOWN
+// b - Drop BOMB
+// x - Stop Moving
 export const DIRECTIONS: TDirections = [
-  [0, -1, "1"],
-  [0, 1, "2"],
-  [-1, 0, "3"],
-  [1, 0, "4"],
+  [0, -1, '1'],
+  [0, 1, '2'],
+  [-1, 0, '3'],
+  [1, 0, '4']
 ];
