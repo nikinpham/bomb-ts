@@ -1,3 +1,5 @@
+import { Directions } from '../types';
+
 export const TAGS = {};
 
 export const BLOCKS = {
@@ -16,7 +18,7 @@ export const BLOCKS = {
 // 4 - Move DOWN
 // b - Drop BOMB
 // x - Stop Moving
-export const DIRECTIONS: TDirections = [
+export const DIRECTIONS: Directions = [
   [0, -1, '1'],
   [0, 1, '2'],
   [-1, 0, '3'],

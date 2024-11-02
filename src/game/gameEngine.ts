@@ -1,17 +1,33 @@
-import { IJoinGameState } from "../interfaces";
+import { TickTackResponse } from '../types';
+import GameState from './gameState';
+import { socket } from '../server';
 
 class GameEngine {
-  static start(res: IJoinGameState) {
-    console.log("[GAME_PLAY]: Start", res);
+  static start() {
+    console.log('[GAME_START]');
+    socket.emit('drive player', { direction: 'x' });
   }
-  static stop() {
-    console.log("[GAME_PLAY]: Stop");
-  }
-  static update(res: any) {
-    console.log("[GAME_PLAY]: Update", res);
-  }
-  static drive(res: any) {
-    console.log("[GAME_PLAY]: Drive", res);
+  static update(res: TickTackResponse) {
+    const { map_info, tag, gameRemainTime } = res;
+    const { size, players, map, bombs, spoils, dragonEggGSTArray } = map_info;
+
+    GameState.setMapSize(size.cols, size.rows);
+
+    GameState.setDragonEggs(dragonEggGSTArray);
+
+    GameState.setGameRemainTime(gameRemainTime);
+
+    players.forEach(player => {
+      GameState.updatePlayerStats(player);
+    });
+
+    GameState.updateMaps(map);
+
+    GameState.updateBombs(bombs);
+
+    GameState.updateSpoils(spoils);
+
+    GameState.updateTag(tag);
   }
 }
 
