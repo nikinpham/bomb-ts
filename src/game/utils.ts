@@ -1,4 +1,5 @@
 import { PathfindingPoint } from 'pathfinding-worker';
+import { TILE_TYPE } from '../constants';
 
 export const pathToDirection = (path: PathfindingPoint[] | null): string => {
   let directions = '';
@@ -45,27 +46,40 @@ export function bfsFindWeight({
   tileType: number;
 }): { x: number; y: number } | null {
   const queue: [number, number][] = [[startX, startY]];
-  const visited: Set<string> = new Set();
+  const visited: Set<string> = new Set([`${startX},${startY}`]);
   const directions: [number, number][] = [
-    [0, 1], // right
-    [1, 0], // down
-    [0, -1], // left
-    [-1, 0] // up
+    [0, 1],
+    [1, 0],
+    [0, -1],
+    [-1, 0]
   ];
 
   while (queue.length > 0) {
     const [x, y] = queue.shift()!;
 
-    // This check ensures that we don't read outside the array bounds
-    if (y < 0 || y >= maps.length || x < 0 || x >= maps[0].length) {
-      continue;
+    if (maps[y] && maps[y][x] === tileType) {
+      if (tileType === TILE_TYPE.BALK) {
+        for (const [dx, dy] of directions) {
+          const px = x - dx;
+          const py = y - dy;
+          if (
+            px >= 0 &&
+            px < maps[0].length &&
+            py >= 0 &&
+            py < maps.length &&
+            maps[py][px] !== tileType &&
+            maps[py][px] !== TILE_TYPE.WALL &&
+            maps[py][px] !== TILE_TYPE.DRAGON_EGG &&
+            maps[py][px] !== TILE_TYPE.QUARANTINE_AREA &&
+            maps[py][px] !== TILE_TYPE.TELEPORT_GATE &&
+            visited.has(`${px},${py}`)
+          ) {
+            return { x: px, y: py };
+          }
+        }
+      }
+      return { x, y };
     }
-
-    if (maps[y][x] === tileType) {
-      return { x, y }; // Return an object with x, y coordinates
-    }
-
-    visited.add(`${x},${y}`);
 
     for (const [dx, dy] of directions) {
       const nx = x + dx;
@@ -76,12 +90,17 @@ export function bfsFindWeight({
         nx < maps[0].length &&
         ny >= 0 &&
         ny < maps.length &&
-        !visited.has(key)
+        !visited.has(key) &&
+        maps[ny][nx] !== TILE_TYPE.DRAGON_EGG &&
+        maps[ny][nx] !== TILE_TYPE.QUARANTINE_AREA &&
+        maps[ny][nx] !== TILE_TYPE.TELEPORT_GATE &&
+        maps[ny][nx] !== TILE_TYPE.WALL
       ) {
         visited.add(key);
         queue.push([nx, ny]);
       }
     }
   }
-  return null; // Return null if no tileType found
+
+  return null; // Trả về null nếu không tìm thấy tileType
 }

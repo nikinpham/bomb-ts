@@ -149,7 +149,6 @@ class GameState {
   //            [Q2_Y]:   Chuyển sang ATTACK_GOAL_MODE
   //            [Q2_N]:   Chuyển sang KILLER_MODE
   static safeMode() {
-    // console.log('current Target', this.target);
     const pathfinding = new Pathfinding();
     const mapLayer = this.maps.map(row =>
       row.map(cell => cell === TILE_TYPE.ROAD)
@@ -161,18 +160,20 @@ class GameState {
       y: this.players['player1-xxx'].currentPosition.row
     };
     // this.players['player1-xxx'].power
+    // console.log(this.players['player1-xxx'].dragonEggAttack);
     const newTarget = bfsFindWeight({
       maps: this.maps,
       startX: from.x,
       startY: from.y,
       tileType: TILE_TYPE.BALK
     });
-    const to = newTarget && {
+    let to = newTarget && {
       x: newTarget.x,
       y: newTarget.y
     };
 
-    // console.log('from -  to', from, to);
+    let direction = '';
+
     if (!!from && !!to) {
       layer.findPath(
         {
@@ -181,13 +182,17 @@ class GameState {
           diagonals: false
         },
         ({ path }) => {
+          // console.log('from -  to - path', from, to, pathToDirection(path));
           // console.log(pathToDirection(path));
-          // socket.emit(EMITS.DRIVE, {
-          //   direction: convertPathToDirection(path)
-          // });
+          direction = pathToDirection(path);
         }
       );
     }
+
+    direction.length > 0 &&
+      socket.emit(EMITS.DRIVE, {
+        direction
+      });
   }
 
   static attackGoalMode() {
