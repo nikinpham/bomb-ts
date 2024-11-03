@@ -1,6 +1,7 @@
 import { io as ClientIO, Socket } from 'socket.io-client';
 import dotenv from 'dotenv';
 import GameEngine from '../game/gameEngine';
+import { EMITS } from '../constants';
 
 dotenv.config();
 
@@ -12,31 +13,20 @@ export const socket: Socket = ClientIO(SOCKET_URL, {
 });
 
 socket.on('connect', () => {
-  console.log(`[SOCKET_LOG] Connected to server with Socket ID: ${socket.id}`);
-  socket.emit('join game', {
+  socket.emit(EMITS.JOIN_GAME, {
     game_id: process.env.GAME_ID,
     player_id: process.env.PLAYER_ID
   });
 });
 
-socket.on('disconnect', () => {
-  console.log(
-    `[SOCKET_LOG] Disconnected to server with Socket ID: ${socket.id}`
-  );
-});
-
-// socket.on("connect_failed", () => {
-//   console.warn("[SOCKET_LOG] Connect Failed to server.");
-// });
-
-socket.on('error', err => {
-  console.error(`[SOCKET_LOG] Error: ${err}`);
-});
-
-socket.on('join game', () => {
+socket.on(EMITS.JOIN_GAME, () => {
   GameEngine.start();
 });
 
-socket.on('ticktack player', res => {
+socket.on(EMITS.UPDATE, res => {
   GameEngine.update(res);
+});
+
+socket.on(EMITS.DRIVE, res => {
+  console.log(res);
 });

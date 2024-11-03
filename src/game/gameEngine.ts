@@ -1,33 +1,15 @@
-import { TickTackResponse } from '../types';
+import { TempoGameState } from '../types';
 import GameState from './gameState';
 import { socket } from '../server';
+import { EMITS } from '../constants';
 
 class GameEngine {
   static start() {
     console.log('[GAME_START]');
-    socket.emit('drive player', { direction: 'x' });
+    socket.emit(EMITS.SPEAK, { command: 't4' });
   }
-  static update(res: TickTackResponse) {
-    const { map_info, tag, gameRemainTime } = res;
-    const { size, players, map, bombs, spoils, dragonEggGSTArray } = map_info;
-
-    GameState.setMapSize(size.cols, size.rows);
-
-    GameState.setDragonEggs(dragonEggGSTArray);
-
-    GameState.setGameRemainTime(gameRemainTime);
-
-    players.forEach(player => {
-      GameState.updatePlayerStats(player);
-    });
-
-    GameState.updateMaps(map);
-
-    GameState.updateBombs(bombs);
-
-    GameState.updateSpoils(spoils);
-
-    GameState.updateTag(tag);
+  static update(tempoGameState: TempoGameState) {
+    GameState.update(tempoGameState);
   }
 }
 

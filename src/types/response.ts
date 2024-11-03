@@ -1,7 +1,7 @@
 import { Bomb, Goal, Maps, Spoil } from './game';
 import { Player } from './player';
 
-export type TickTackResponse = {
+export type TempoGameState = {
   id: number;
   timestamp: Date;
   map_info: {
