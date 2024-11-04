@@ -1,4 +1,4 @@
-import { Bomb, Goal, Maps, Spoil } from './game';
+import { Bomb, Maps, Spoil } from './game';
 import { Player } from './player';
 
 export type TempoGameState = {
@@ -14,7 +14,8 @@ export type TempoGameState = {
     bombs: Bomb[];
     spoils: Spoil[];
     gameStatus: string | null;
-    dragonEggGSTArray: Goal[];
+    weaponHammers: number[];
+    cellSize: number;
   };
   tag: string;
   gameRemainTime: number;

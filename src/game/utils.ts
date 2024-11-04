@@ -69,9 +69,6 @@ export function bfsFindWeight({
             py < maps.length &&
             maps[py][px] !== tileType &&
             maps[py][px] !== TILE_TYPE.WALL &&
-            maps[py][px] !== TILE_TYPE.DRAGON_EGG &&
-            maps[py][px] !== TILE_TYPE.QUARANTINE_AREA &&
-            maps[py][px] !== TILE_TYPE.TELEPORT_GATE &&
             visited.has(`${px},${py}`)
           ) {
             return { x: px, y: py };
@@ -91,9 +88,6 @@ export function bfsFindWeight({
         ny >= 0 &&
         ny < maps.length &&
         !visited.has(key) &&
-        maps[ny][nx] !== TILE_TYPE.DRAGON_EGG &&
-        maps[ny][nx] !== TILE_TYPE.QUARANTINE_AREA &&
-        maps[ny][nx] !== TILE_TYPE.TELEPORT_GATE &&
         maps[ny][nx] !== TILE_TYPE.WALL
       ) {
         visited.add(key);

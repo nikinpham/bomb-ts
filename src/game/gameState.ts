@@ -1,8 +1,5 @@
-import { Bomb, Goal, Map, Maps, Player, Spoil, TempoGameState } from '../types';
-import { EMITS, GAME_MODE, TILE_TYPE } from '../constants';
-import { Pathfinding } from 'pathfinding-worker';
-import { bfsFindWeight, pathToDirection } from './utils';
-import { socket } from '../server';
+import { TILE_TYPE } from '../constants';
+import { Bomb, Map, Maps, Player, Spoil, TempoGameState } from '../types';
 
 class GameState {
   static gameRemainTime: number = 0;
@@ -21,8 +18,7 @@ class GameState {
   static maps: Maps = [];
   static tag: string = '';
 
-  static mode: string = GAME_MODE.SAFE;
-  static target: number[] = [TILE_TYPE.BALK, TILE_TYPE.MYSTIC];
+  static target: number[] = [TILE_TYPE.BALK];
 
   static setGameRemainTime(time: number) {
     if (this.gameRemainTime && this.gameRemainTime === time) return;
@@ -38,20 +34,6 @@ class GameState {
       return;
     }
     this.mapSize = { cols, rows };
-  }
-
-  static setDragonEggs(dragonEggs: Goal[]) {
-    if (
-      this.dragonEggs.every(
-        (egg, index) =>
-          egg.row === dragonEggs[index].row &&
-          egg.col === dragonEggs[index].col &&
-          egg.player_id === dragonEggs[index].player_id
-      )
-    ) {
-      return;
-    }
-    this.dragonEggs = dragonEggs;
   }
 
   static updateTag(tag: string) {
@@ -86,7 +68,7 @@ class GameState {
         (bomb, index) =>
           bomb.row === bombs[index].row &&
           bomb.col === bombs[index].col &&
-          bomb.remain_time === bombs[index].remain_time &&
+          bomb.remainTime === bombs[index].remainTime &&
           bomb.playerId === bombs[index].playerId
       )
     ) {
@@ -109,11 +91,10 @@ class GameState {
 
   static update(tempoGameState: TempoGameState) {
     const { map_info, tag, gameRemainTime } = tempoGameState;
-    const { size, players, map, bombs, spoils, dragonEggGSTArray } = map_info;
+    const { size, players, map, bombs, spoils } = map_info;
 
     this.setGameRemainTime(gameRemainTime);
     this.setMapSize(size.cols, size.rows);
-    this.setDragonEggs(dragonEggGSTArray);
 
     this.updateTag(tag);
     players.forEach(player => {
@@ -127,87 +108,7 @@ class GameState {
     this.play();
   }
 
-  static play() {
-    switch (this.mode) {
-      case GAME_MODE.ATTACK_GOAL: {
-        this.attackGoalMode();
-        break;
-      }
-      case GAME_MODE.KILLER: {
-        this.killerMode();
-        break;
-      }
-      default: {
-        this.safeMode();
-      }
-    }
-  }
-
-  //  [Q1]: Tìm kiến tồn tại đơn vị để nâng cao điểm trên bản đồ?
-  //  [Q1_Y]: Đi thu thập
-  //  [Q1_N]:   [Q2] kiểm tra điểm của mình có cao hơn hoặc đối phương không?
-  //            [Q2_Y]:   Chuyển sang ATTACK_GOAL_MODE
-  //            [Q2_N]:   Chuyển sang KILLER_MODE
-  static safeMode() {
-    const pathfinding = new Pathfinding();
-    const mapLayer = this.maps.map(row =>
-      row.map(cell => cell === TILE_TYPE.ROAD)
-    );
-
-    const layer = pathfinding.createLayer(mapLayer);
-    const from = {
-      x: this.players['player1-xxx'].currentPosition.col,
-      y: this.players['player1-xxx'].currentPosition.row
-    };
-    // this.players['player1-xxx'].power
-    // console.log(this.players['player1-xxx'].dragonEggAttack);
-    const newTarget = bfsFindWeight({
-      maps: this.maps,
-      startX: from.x,
-      startY: from.y,
-      tileType: TILE_TYPE.BALK
-    });
-    let to = newTarget && {
-      x: newTarget.x,
-      y: newTarget.y
-    };
-
-    let direction = '';
-
-    if (!!from && !!to) {
-      layer.findPath(
-        {
-          from,
-          to,
-          diagonals: false
-        },
-        ({ path }) => {
-          // console.log('from -  to - path', from, to, pathToDirection(path));
-          // console.log(pathToDirection(path));
-          direction = pathToDirection(path);
-        }
-      );
-    }
-
-    direction.length > 0 &&
-      socket.emit(EMITS.DRIVE, {
-        direction
-      });
-  }
-
-  static attackGoalMode() {
-    // console.log('[ATTACK_GOAL_MODE]');
-    // Đi đến vị trí GOAL
-    // Tìm vị trí an toàn nhất
-    // Dặt bomb để duy trì điểm
-  }
-
-  static killerMode() {
-    // console.log('[KILLER_MODE]');
-    // Đi đến vị trí của kẻ địch
-    // Tính toán các vị trí có thể khóa mục tiêu
-    // Đặt bomb và di chuyển đến vị trí an toàn mà vẫn khóa mục tiêu
-  }
+  static play() {}
 }
 
 export default GameState;

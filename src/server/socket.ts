@@ -15,7 +15,7 @@ export const socket: Socket = ClientIO(SOCKET_URL, {
 socket.on('connect', () => {
   socket.emit(EMITS.JOIN_GAME, {
     game_id: process.env.GAME_ID,
-    player_id: process.env.PLAYER_ID
+    player_id: 'player1-xxx'
   });
 });
 

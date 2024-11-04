@@ -1,21 +1,20 @@
 version: '3.7'
-name: codefest2023
+name: codefest2024
 services:
   codefest-db:
     image: mongo
     container_name: codefest-db
     ports:
-      - "27017:27017" 
+      - "27017:27017"
 
   codefest-srv:
-    image: codefest:20231012-1629
+    image: codefest:20241104-1259
     container_name: codefest-srv
     ports:
       - "80:3000"
     links:
       - "codefest-db:mongo"
     environment:
-      - DB_NAME=codefest2023
+      - DB_NAME=codefest2024
       - DB_HOST=codefest-db:27017
       - DEMO_MODE=y
-  

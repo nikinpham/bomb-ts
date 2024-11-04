@@ -4,10 +4,10 @@ export enum TILE_TYPE {
   ROAD = 0,
   WALL = 1,
   BALK = 2,
-  TELEPORT_GATE = 3,
-  QUARANTINE_AREA = 4,
-  DRAGON_EGG = 5,
-  MYSTIC = 6
+  BRICK_WALL = 3,
+  PRISON_PLACE = 4,
+  GOD_BADGE = 5,
+  DESTROYED_CELL = 6
 }
 
 // 1 - Move LEFT
