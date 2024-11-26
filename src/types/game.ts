@@ -1,5 +1,3 @@
-import { start } from 'node:repl';
-
 export type Position = {
   row: number;
   col: number;
@@ -50,6 +48,7 @@ export type WeaponWinds = {
 
 export enum TAGS {
   //  Player's tag values
+  PLAYER_TRANSFORMED = 'player:transformed',
   PLAYER_MOVING_BANNED = 'player:moving-banned',
   PLAYER_START_MOVING = 'player:start-moving',
   PLAYER_STOP_MOVING = 'player:stop-moving',

@@ -7,6 +7,7 @@ export type Player = {
   score: number;
   lives: number;
   transformType: number;
+  ownerWeapon: number[];
   currentWeapon: number;
   hasTransform: boolean;
   timeToUseSpecialWeapon: number;

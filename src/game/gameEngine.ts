@@ -5,11 +5,10 @@ import { EMITS } from '../constants';
 
 class GameEngine {
   static start() {
-    console.log('[GAME_START]');
     socket.emit(EMITS.SPEAK, { command: 't4' });
   }
-  static update(tempoGameState: TempoGameState) {
-    GameState.update(tempoGameState);
+  static update(gameState: TempoGameState) {
+    GameState.update(gameState);
   }
 }
 

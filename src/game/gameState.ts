@@ -1,7 +1,10 @@
-import { TILE_TYPE } from '../constants';
-import { Bomb, Map, Maps, Player, Spoil, TempoGameState } from '../types';
+import { GAME_MODE, PLAYER_ID } from '../constants';
+import { Bomb, Map, Maps, Player, Position, Spoil, TAGS, TempoGameState } from '../types';
+import { findGodBadges } from '../utils/utils';
+import { collectGodBadge } from './earlyGame';
 
 class GameState {
+  // Game status
   static gameRemainTime: number = 0;
   static mapSize: Map = {
     rows: 0,
@@ -16,9 +19,15 @@ class GameState {
   static bombs: Bomb[] = [];
   static spoils: Spoil[] = [];
   static maps: Maps = [];
-  static tag: string = '';
+  static tag = '';
+  static godBadges: Position[] = [];
 
-  static target: number[] = [TILE_TYPE.BALK];
+  // Custom Variables
+  static target: number[] = [];
+  static path = '';
+  static currentFacedDirection = '';
+  static isRunning = false;
+  static gameMode: GAME_MODE = GAME_MODE.COLLECT_BADGE;
 
   static setGameRemainTime(time: number) {
     if (this.gameRemainTime && this.gameRemainTime === time) return;
@@ -26,23 +35,36 @@ class GameState {
   }
 
   static setMapSize(cols: number, rows: number) {
-    if (
-      this.mapSize &&
-      this.mapSize.cols === cols &&
-      this.mapSize.rows === rows
-    ) {
+    if (this.mapSize && this.mapSize.cols === cols && this.mapSize.rows === rows) {
       return;
     }
     this.mapSize = { cols, rows };
   }
 
+  static setGodBadges(maps: Maps) {
+    const godBadges = findGodBadges(maps);
+
+    if (
+      this.godBadges?.length === godBadges.length &&
+      this.godBadges.every((badge, index) => badge.row === godBadges[index].row && badge.col === godBadges[index].col)
+    ) {
+      return;
+    }
+    this.godBadges = godBadges;
+  }
+
   static updateTag(tag: string) {
+    if (tag === TAGS.PLAYER_TRANSFORMED) {
+      this.gameMode = GAME_MODE.SAFE;
+    }
     if (this.tag === tag) return;
     this.tag = tag;
+
     console.log('[TAG]: ', this.tag);
   }
 
   static updatePlayerStats(player: Player) {
+    // console.log(player);
     this.players[player.id] = { ...player };
   }
 
@@ -80,9 +102,7 @@ class GameState {
   static updateMaps(maps: Maps) {
     if (
       this.maps.length > 0 &&
-      this.maps.every((row, rowIndex) =>
-        row.every((cell, colIndex) => cell === maps[rowIndex][colIndex])
-      )
+      this.maps.every((row, rowIndex) => row.every((cell, colIndex) => cell === maps[rowIndex][colIndex]))
     ) {
       return;
     }
@@ -95,12 +115,12 @@ class GameState {
 
     this.setGameRemainTime(gameRemainTime);
     this.setMapSize(size.cols, size.rows);
+    this.setGodBadges(map);
 
     this.updateTag(tag);
     players.forEach(player => {
       this.updatePlayerStats(player);
     });
-
     this.updateMaps(map);
     this.updateBombs(bombs);
     this.updateSpoils(spoils);
@@ -108,7 +128,17 @@ class GameState {
     this.play();
   }
 
-  static play() {}
+  static play() {
+    switch (this.gameMode) {
+      case GAME_MODE.COLLECT_BADGE:
+        collectGodBadge(this.maps, this.players[PLAYER_ID].currentPosition, this.godBadges);
+        break;
+      default:
+        this.collectItems();
+    }
+  }
+
+  static collectItems() {}
 }
 
 export default GameState;

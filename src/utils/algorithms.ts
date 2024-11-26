@@ -1,40 +1,6 @@
-import { PathfindingPoint } from 'pathfinding-worker';
 import { TILE_TYPE } from '../constants';
 
-export const pathToDirection = (path: PathfindingPoint[] | null): string => {
-  let directions = '';
-
-  // Early exit if path is null, returning an empty string
-  if (path === null) {
-    return directions;
-  }
-
-  // Loop through the path and convert each segment to a direction
-  for (let i = 0; i < path.length - 1; i++) {
-    directions += getDirection(
-      [path[i].x, path[i].y],
-      [path[i + 1].x, path[i + 1].y]
-    );
-  }
-
-  return directions;
-};
-
-function getDirection(
-  current: [number, number],
-  next: [number, number]
-): string {
-  const [x1, y1] = current;
-  const [x2, y2] = next;
-
-  if (y1 === y2 && x1 > x2) return '1'; // Left
-  if (y1 === y2 && x1 < x2) return '2'; // Right
-  if (x1 === x2 && y1 > y2) return '3'; // Up
-  if (x1 === x2 && y1 < y2) return '4'; // Down
-  return 'x'; // Stop or invalid move
-}
-
-export function bfsFindWeight({
+export const bfsFindWeight = ({
   maps,
   startX,
   startY,
@@ -44,7 +10,7 @@ export function bfsFindWeight({
   startX: number;
   startY: number;
   tileType: number;
-}): { x: number; y: number } | null {
+}): { x: number; y: number } | null => {
   const queue: [number, number][] = [[startX, startY]];
   const visited: Set<string> = new Set([`${startX},${startY}`]);
   const directions: [number, number][] = [
@@ -97,4 +63,4 @@ export function bfsFindWeight({
   }
 
   return null; // Trả về null nếu không tìm thấy tileType
-}
+};

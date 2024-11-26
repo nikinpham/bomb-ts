@@ -1,7 +1,7 @@
 import { io as ClientIO, Socket } from 'socket.io-client';
 import dotenv from 'dotenv';
 import GameEngine from '../game/gameEngine';
-import { EMITS } from '../constants';
+import { EMITS, PLAYER_ID } from '../constants';
 
 dotenv.config();
 
@@ -15,7 +15,12 @@ export const socket: Socket = ClientIO(SOCKET_URL, {
 socket.on('connect', () => {
   socket.emit(EMITS.JOIN_GAME, {
     game_id: process.env.GAME_ID,
-    player_id: 'player1-xxx'
+    player_id: PLAYER_ID
+  });
+
+  socket.emit(EMITS.REGISTER_CHARACTER_POWER, {
+    game_id: process.env.GAME_ID,
+    type: 2
   });
 });
 

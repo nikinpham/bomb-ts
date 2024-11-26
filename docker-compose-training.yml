@@ -8,7 +8,7 @@ services:
       - "27017:27017"
 
   codefest-srv:
-    image: codefest:20241104-1259
+    image: codefest:20241122-1502
     container_name: codefest-srv
     ports:
       - "80:3000"
