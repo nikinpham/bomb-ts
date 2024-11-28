@@ -2,6 +2,8 @@ export type Position = {
   row: number;
   col: number;
 };
+
+export type PositionWithValue = Position & { value: number };
 export type Directions = [number, number, string][];
 
 export type Maps = number[][];
@@ -11,17 +13,13 @@ export type Map = {
   rows: number;
 };
 
-export type Bomb = {
-  row: number;
-  col: number;
+export type Bomb = Position & {
   remainTime: number;
   playerId: string;
   power: number;
 };
 
-export type Spoil = {
-  row: number;
-  col: number;
+export type Spoil = Position & {
   spoil_type: number;
   // Values of spoil types: 				Bonus:
   // 32 - STICKY RICE								1 score

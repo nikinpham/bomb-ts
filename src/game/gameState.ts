@@ -1,6 +1,6 @@
 import { GAME_MODE, PLAYER_ID } from '../constants';
-import { Bomb, Map, Maps, Player, Position, Spoil, TAGS, TempoGameState } from '../types';
-import { findGodBadges } from '../utils/utils';
+import { Bomb, Map, Maps, Player, Position, Spoil, TempoGameState } from '../types';
+import { findGodBadges } from '../utils';
 import { collectGodBadge } from './earlyGame';
 
 class GameState {
@@ -54,9 +54,6 @@ class GameState {
   }
 
   static updateTag(tag: string) {
-    if (tag === TAGS.PLAYER_TRANSFORMED) {
-      this.gameMode = GAME_MODE.SAFE;
-    }
     if (this.tag === tag) return;
     this.tag = tag;
 
@@ -131,7 +128,10 @@ class GameState {
   static play() {
     switch (this.gameMode) {
       case GAME_MODE.COLLECT_BADGE:
-        collectGodBadge(this.maps, this.players[PLAYER_ID].currentPosition, this.godBadges);
+        const collected = collectGodBadge(this.maps, this.players[PLAYER_ID].currentPosition, this.godBadges);
+        if (collected) {
+          this.gameMode = GAME_MODE.COLLECT_SPOIL;
+        }
         break;
       default:
         this.collectItems();

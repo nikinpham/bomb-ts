@@ -1,5 +1,3 @@
-import { Directions } from '../types';
-
 export enum TILE_TYPE {
   ROAD = 0,
   WALL = 1,
@@ -9,19 +7,6 @@ export enum TILE_TYPE {
   GOD_BADGE = 6,
   DESTROYED_CELL = 7
 }
-
-// 1 - Move LEFT
-// 2 - Move RIGHT.
-// 3 - Move UP
-// 4 - Move DOWN
-// b - Drop BOMB
-// x - Stop Moving
-// export const DIRECTIONS: Directions = [
-//   [0, -1, '1'],
-//   [0, 1, '2'],
-//   [-1, 0, '3'],
-//   [1, 0, '4']
-// ];
 
 export enum EMITS {
   JOIN_GAME = 'join game',
@@ -39,8 +24,8 @@ export enum ACTIONS {
 }
 
 export enum GAME_MODE {
-  SAFE = 'SAFE',
   COLLECT_BADGE = 'COLLECT_BADGE',
+  COLLECT_SPOIL = 'COLLECT_SPOIL',
   ATTACK_GOAL = 'ATTACK_GOAL',
   KILLER = 'KILLER'
 }
@@ -58,3 +43,5 @@ export enum FACE_DIRECTIONS {
   UP = 'UP',
   DOWN = 'DOWN'
 }
+
+export const EARLY_GAME_TILE_LIMIT = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.DESTROYED_CELL];
