@@ -1,10 +1,16 @@
-import { GAME_MODE, PLAYER_ID } from '../constants';
-import { Bomb, Map, Maps, Player, Position, Spoil, TempoGameState } from '../types';
-import { findGodBadges } from '../utils';
-import { collectGodBadge } from './earlyGame';
+import { EARLY_GAME_TILE_LIMIT, GAME_MODE, PLAYER_ID } from '../constants';
+import { Bomb, Map, Maps, Player, Position, Spoil, TAGS, TempoGameState } from '../types';
+import {
+  bombSetup,
+  convertRawPath,
+  drive,
+  findGodBadges,
+  getPathToNearestItems,
+  isHaveWedding,
+  turnPlayerFace
+} from '../utils';
 
 class GameState {
-  // Game status
   static gameRemainTime: number = 0;
   static mapSize: Map = {
     rows: 0,
@@ -16,18 +22,19 @@ class GameState {
     player_id: string;
   }[] = [];
   static players: { [id: string]: Player } = {};
+  static prevPlayerPosition: Position | undefined = undefined;
+
   static bombs: Bomb[] = [];
   static spoils: Spoil[] = [];
   static maps: Maps = [];
   static tag = '';
   static godBadges: Position[] = [];
 
-  // Custom Variables
   static target: number[] = [];
-  static path = '';
-  static currentFacedDirection = '';
+  static path: string | null = '';
   static isRunning = false;
   static gameMode: GAME_MODE = GAME_MODE.COLLECT_BADGE;
+  static faceSide: string | null = null;
 
   static setGameRemainTime(time: number) {
     if (this.gameRemainTime && this.gameRemainTime === time) return;
@@ -54,15 +61,16 @@ class GameState {
   }
 
   static updateTag(tag: string) {
+    if (tag === TAGS.PLAYER_TRANSFORMED) this.gameMode = GAME_MODE.COLLECT_SPOIL;
     if (this.tag === tag) return;
     this.tag = tag;
 
-    console.log('[TAG]: ', this.tag);
+    // console.log('[TAG]: ', this.tag);
   }
 
   static updatePlayerStats(player: Player) {
-    // console.log(player);
     this.players[player.id] = { ...player };
+    if (this.players[PLAYER_ID].hasTransform) this.gameMode = GAME_MODE.COLLECT_SPOIL;
   }
 
   static updateSpoils(spoils: Spoil[]) {
@@ -78,7 +86,7 @@ class GameState {
     }
 
     this.spoils = spoils;
-    console.log('[SPOILS]: ', spoils);
+    // console.log('[SPOILS]: ', spoils);
   }
 
   static updateBombs(bombs: Bomb[]) {
@@ -128,17 +136,72 @@ class GameState {
   static play() {
     switch (this.gameMode) {
       case GAME_MODE.COLLECT_BADGE:
-        const collected = collectGodBadge(this.maps, this.players[PLAYER_ID].currentPosition, this.godBadges);
+        const collected = this.collectGodBadge();
         if (collected) {
           this.gameMode = GAME_MODE.COLLECT_SPOIL;
         }
         break;
+      case GAME_MODE.COLLECT_SPOIL:
+        const readyForWedding = this.collectSpoils();
+        if (readyForWedding) {
+          this.gameMode = GAME_MODE.KILLER;
+        }
+        break;
       default:
-        this.collectItems();
+        this.killerMode();
     }
   }
 
-  static collectItems() {}
+  static collectGodBadge() {
+    if (this.godBadges.length === 0) {
+      return true;
+    }
+    const rawPathToGodBadge = getPathToNearestItems(
+      this.maps,
+      EARLY_GAME_TILE_LIMIT,
+      this.players[PLAYER_ID].currentPosition,
+      this.godBadges
+    );
+
+    if (!rawPathToGodBadge) {
+      return false;
+    }
+
+    const directions = convertRawPath(rawPathToGodBadge);
+    const faceDirection = turnPlayerFace(this.players[PLAYER_ID].currentPosition, rawPathToGodBadge[1]);
+
+    if (!directions) {
+      if (this.faceSide !== faceDirection) {
+        this.faceSide = faceDirection;
+        drive(this.faceSide);
+        return false;
+      } else {
+        drive(bombSetup());
+        this.faceSide = null;
+        return false;
+      }
+    } else {
+      this.faceSide = null;
+      drive(directions);
+      return false;
+    }
+  }
+
+  static collectSpoils() {
+    const readyForWedding = isHaveWedding(this.players[PLAYER_ID]);
+    if (readyForWedding) {
+      return true;
+    }
+
+    // else
+    //    scan các các đối tượng
+    //    pick target (
+    //    đập box
+    //    tìm vị trí an
+    //    đợi bomb nổ
+  }
+
+  static killerMode() {}
 }
 
 export default GameState;

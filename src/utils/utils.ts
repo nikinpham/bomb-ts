@@ -1,5 +1,5 @@
 import { EMITS, TILE_TYPE } from '../constants';
-import { Maps, Position } from '../types';
+import { Maps, Player, Position } from '../types';
 import { socket } from '../server';
 
 export const findGodBadges = (maps: Maps): Position[] => {
@@ -18,10 +18,15 @@ export const findGodBadges = (maps: Maps): Position[] => {
   return positions;
 };
 
-export const drive = (direction: string) => {
-  socket.emit(EMITS.DRIVE, {
-    direction
-  });
+export const drive = (direction: string | null) => {
+  direction &&
+    socket.emit(EMITS.DRIVE, {
+      direction
+    });
 };
 
-export const bombSetup = (faced?: string) => `${faced ?? ''}b`;
+export const bombSetup = (facedDirection?: string | null) => `${facedDirection ?? ''}b`;
+
+export const isHaveWedding = (playerInformation: Player) => {
+  return false;
+};

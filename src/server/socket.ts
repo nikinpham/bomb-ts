@@ -17,14 +17,13 @@ socket.on('connect', () => {
     game_id: process.env.GAME_ID,
     player_id: PLAYER_ID
   });
-
-  socket.emit(EMITS.REGISTER_CHARACTER_POWER, {
-    game_id: process.env.GAME_ID,
-    type: 2
-  });
 });
 
 socket.on(EMITS.JOIN_GAME, () => {
+  socket.emit(EMITS.REGISTER_CHARACTER_POWER, {
+    game_id: process.env.GAME_ID,
+    type: '2'
+  });
   GameEngine.start();
 });
 

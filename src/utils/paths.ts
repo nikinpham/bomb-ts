@@ -1,4 +1,5 @@
 import { Maps, Position, PositionWithValue } from '../types';
+import { TILE_TYPE } from '../constants';
 
 export const getDirection = (current: Position, next: Position): string => {
   if (current.row === next.row && current.col > next.col) return '1'; //  RIGHT
@@ -80,18 +81,30 @@ export const getPathToNearestItems = (
 export const convertRawPath = (rawPath: PositionWithValue[]): string | null => {
   // Check if rawPath is empty or has less than 2 positions
   if (!rawPath || rawPath.length < 2) return null;
-
   let directions = '';
-
   for (let i = 0; i < rawPath.length - 1; i++) {
     const current = rawPath[i];
     const next = rawPath[i + 1];
     const direction = getDirection(current, next);
-    if (next.value === 3) {
+    if (next.value === TILE_TYPE.BRICK_WALL) {
       return directions;
     }
     directions += direction;
   }
 
   return directions;
+};
+
+export const turnPlayerFace = (playerPosition: Position, targetPosition: Position): string | null => {
+  if (!playerPosition || !targetPosition) return null;
+
+  const rowDiff = Math.abs(playerPosition.row - targetPosition.row);
+  const colDiff = Math.abs(playerPosition.col - targetPosition.col);
+
+  // console.log(playerPosition, targetPosition);
+  if ((rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)) {
+    return getDirection(playerPosition, targetPosition);
+  }
+
+  return null;
 };
