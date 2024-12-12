@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { socket } from './server';
 import { io as ClientIO, Socket } from 'socket.io-client';
+import { EMITS } from './constants';
 
 dotenv.config();
 socket;
