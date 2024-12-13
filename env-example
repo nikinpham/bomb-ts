@@ -1,3 +1,5 @@
-SOCKET_URL="http://localhost"
-PORT=3000
-GAME_ID=""
+#SOCKET_URL=http://localhost
+#PORT=3000
+#GAME_ID=b38d2db6-1a95-4fe8-8172-5400a666e1a8
+#PLAYER_ID=player1-xxx
+#MY_ID=player1-xxx
