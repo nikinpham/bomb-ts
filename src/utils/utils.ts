@@ -115,6 +115,11 @@ export const onWedding = () => {
 //   return { updatedMap, dangerZones };
 // };
 
+export const extractPlayerPositionsExcluding = (players: Record<string, Player>, excludeId: string): Position[] => {
+  return Object.entries(players)
+    .filter(([id]) => id !== excludeId) // Bỏ qua phần tử có id là excludeId
+    .map(([, player]) => player.currentPosition); // Lấy vị trí
+};
 export const updateMapsWithDangerZone = (
   updatedMap: Maps,
   bombs: Bomb[],

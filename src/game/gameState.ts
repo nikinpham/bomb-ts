@@ -86,10 +86,19 @@ export default class GameState {
 
   updatePlayerStats(player: Player) {
     this.players[player.id] = { ...player };
-    if (this.players[this.playerId] && this.players[this.playerId].hasTransform)
+    if (
+      this.players[this.playerId] &&
+      this.players[this.playerId].hasTransform &&
+      !Object.keys(this.players).includes(this.playerChildId)
+    )
       this.gameMode = GAME_MODE.COLLECT_SPOIL;
-    if (this.players[this.playerId] && this.players[this.playerId].eternalBadge > 0) {
+    if (
+      this.players[this.playerId] &&
+      this.players[this.playerId].eternalBadge > 0 &&
+      !Object.keys(this.players).includes(this.playerChildId)
+    ) {
       this.gameMode = GAME_MODE.KILLER;
+      // onWedding();
     }
   }
 
@@ -171,7 +180,6 @@ export default class GameState {
         const collectSpoilCondition = this.players[this.playerId].eternalBadge > 0;
         this.collectTarget(this.maps, targets, targetType, COLLECT_SPOIL_LIMIT, collectSpoilCondition);
         if (collectSpoilCondition) {
-          onWedding();
           this.gameMode = GAME_MODE.KILLER;
         }
         return;
@@ -180,11 +188,11 @@ export default class GameState {
         if (targetType === TILE_TYPE.BRICK_WALL && currentWeapon === 2) {
           onSwitchWeapon();
         }
-        const { updatedMap } = updateMapsWithDangerZone(this.maps, this.bombs);
+        // const { updatedMap } = updateMapsWithDangerZone(this.maps, this.bombs);
         const limit = this.balks.length > 0 ? COLLECT_SPOIL_LIMIT : EARLY_GAME_TILE_LIMIT;
         this.collectTarget(this.maps, targets, targetType, limit, false);
-        if (Object.keys(this.players).includes(this.playerChildId))
-          this.collectTargetChild(updatedMap, targets, targetType, limit, false);
+        // if (Object.keys(this.players).includes(this.playerChildId))
+        //   this.collectTargetChild(updatedMap, targets, targetType, limit, false);
       }
     }
   }
