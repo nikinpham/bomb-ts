@@ -25,6 +25,14 @@ export const drive = (direction: string | null) => {
     });
 };
 
+export const driveChild = (direction: string | null) => {
+  direction &&
+    socket.emit(EMITS.DRIVE, {
+      direction,
+      characterType: 'child'
+    });
+};
+
 export const bombSetup = (facedDirection?: string | null) => `${facedDirection ?? ''}b`;
 
 // export const isHaveWedding = (playerInformation: Player) => {
@@ -49,6 +57,10 @@ export const onSwitchWeapon = () => {
   socket.emit(EMITS.ACTIONS, {
     action: ACTIONS.SWITCH_WEAPON
   });
+  socket.emit(EMITS.ACTIONS, {
+    action: ACTIONS.SWITCH_WEAPON,
+    characterType: 'child'
+  });
 };
 export const onWedding = () => {
   socket.emit(EMITS.ACTIONS, {
@@ -56,42 +68,89 @@ export const onWedding = () => {
   });
 };
 
+// export const updateMapsWithDangerZone = (
+//   updatedMap: Maps,
+//   bombs: Bomb[]
+// ): { updatedMap: Maps; dangerZones: Position[] } => {
+//   const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
+//   const dangerZones: Position[] = []; // Array to store danger zone positions
+//
+//   // Helper function to mark danger zones in a specific direction
+//   const markDangerZone = (startRow: number, startCol: number, deltaRow: number, deltaCol: number, power: number) => {
+//     for (let i = 1; i <= power * 2; i++) {
+//       const newRow = startRow + i * deltaRow;
+//       const newCol = startCol + i * deltaCol;
+//
+//       if (
+//         newRow >= 0 &&
+//         newRow < updatedMap.length &&
+//         newCol >= 0 &&
+//         newCol < updatedMap[newRow].length &&
+//         !limitTile.includes(updatedMap[newRow][newCol])
+//       ) {
+//         if (updatedMap[newRow][newCol] !== TILE_TYPE.BOMB_ZONE) {
+//           updatedMap[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
+//           dangerZones.push({ row: newRow, col: newCol });
+//         }
+//       } else break;
+//     }
+//   };
+//
+//   bombs.forEach((bomb: Bomb) => {
+//     const { row, col, power } = bomb;
+//
+//     // Mark danger zones in all four directions
+//     markDangerZone(row, col, 0, -1, power); // Left
+//     markDangerZone(row, col, 0, 1, power); // Right
+//     markDangerZone(row, col, -1, 0, power); // Up
+//     markDangerZone(row, col, 1, 0, power); // Down
+//
+//     // Mark the bomb's position
+//     if (updatedMap[row][col] !== TILE_TYPE.BOMB_ZONE) {
+//       updatedMap[row][col] = TILE_TYPE.BOMB_ZONE;
+//       dangerZones.push({ row, col });
+//     }
+//   });
+//
+//   return { updatedMap, dangerZones };
+// };
+
 export const updateMapsWithDangerZone = (
   updatedMap: Maps,
-  bombs: Bomb[]
+  bombs: Bomb[],
+  players?: Position[]
 ): { updatedMap: Maps; dangerZones: Position[] } => {
   const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
   const dangerZones: Position[] = []; // Array to store danger zone positions
 
-  // Helper function to mark danger zones in a specific direction
-  const markDangerZone = (startRow: number, startCol: number, deltaRow: number, deltaCol: number, power: number) => {
-    for (let i = 1; i <= power; i++) {
-      const newRow = startRow + i * deltaRow;
-      const newCol = startCol + i * deltaCol;
+  // Helper function to mark danger zones in a square area
+  const markSquareDangerZone = (centerRow: number, centerCol: number, power: number) => {
+    for (let deltaRow = -power; deltaRow <= power + 1; deltaRow++) {
+      for (let deltaCol = -power; deltaCol <= power + 1; deltaCol++) {
+        const newRow = centerRow + deltaRow;
+        const newCol = centerCol + deltaCol;
 
-      if (
-        newRow >= 0 &&
-        newRow < updatedMap.length &&
-        newCol >= 0 &&
-        newCol < updatedMap[newRow].length &&
-        !limitTile.includes(updatedMap[newRow][newCol])
-      ) {
-        if (updatedMap[newRow][newCol] !== TILE_TYPE.BOMB_ZONE) {
-          updatedMap[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
-          dangerZones.push({ row: newRow, col: newCol });
+        if (
+          newRow >= 0 &&
+          newRow < updatedMap.length &&
+          newCol >= 0 &&
+          newCol < updatedMap[newRow].length &&
+          !limitTile.includes(updatedMap[newRow][newCol])
+        ) {
+          if (updatedMap[newRow][newCol] !== TILE_TYPE.BOMB_ZONE) {
+            updatedMap[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
+            dangerZones.push({ row: newRow, col: newCol });
+          }
         }
-      } else break;
+      }
     }
   };
 
   bombs.forEach((bomb: Bomb) => {
     const { row, col, power } = bomb;
 
-    // Mark danger zones in all four directions
-    markDangerZone(row, col, 0, -1, power); // Left
-    markDangerZone(row, col, 0, 1, power); // Right
-    markDangerZone(row, col, -1, 0, power); // Up
-    markDangerZone(row, col, 1, 0, power); // Down
+    // Mark danger zones in a square area around the bomb
+    markSquareDangerZone(row, col, power);
 
     // Mark the bomb's position
     if (updatedMap[row][col] !== TILE_TYPE.BOMB_ZONE) {
@@ -99,6 +158,15 @@ export const updateMapsWithDangerZone = (
       dangerZones.push({ row, col });
     }
   });
+
+  players &&
+    players.forEach((player: Position) => {
+      const { row, col } = player;
+
+      // Define the range around the player (e.g., power = 1)
+      const playerDangerZonePower = 3;
+      markSquareDangerZone(row, col, playerDangerZonePower);
+    });
 
   return { updatedMap, dangerZones };
 };

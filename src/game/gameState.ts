@@ -4,6 +4,7 @@ import {
   bombSetup,
   convertRawPath,
   drive,
+  driveChild,
   findGodBadges,
   getPathToNearestItems,
   getPathToNearestSafeTile,
@@ -25,10 +26,12 @@ export default class GameState {
   private maps: Maps;
   private tag: string | null;
   private godBadges: Position[];
-  private playerId: string;
+  private readonly playerId: string;
+  private readonly playerChildId: string;
 
   private gameMode: GAME_MODE;
   private isMoving: boolean;
+  private isChildMoving: boolean;
 
   constructor() {
     this.gameRemainTime = 0;
@@ -43,10 +46,12 @@ export default class GameState {
     this.tag = null;
     this.godBadges = [];
     this.isMoving = false;
+    this.isChildMoving = false;
     this.gameMode = GAME_MODE.COLLECT_BADGE;
     this.balks = [];
     this.brickWalls = [];
     this.playerId = process.env.MY_ID || '';
+    this.playerChildId = this.playerId + '_child';
   }
 
   setGameRemainTime(time: number) {
@@ -83,6 +88,9 @@ export default class GameState {
     this.players[player.id] = { ...player };
     if (this.players[this.playerId] && this.players[this.playerId].hasTransform)
       this.gameMode = GAME_MODE.COLLECT_SPOIL;
+    if (this.players[this.playerId] && this.players[this.playerId].eternalBadge > 0) {
+      this.gameMode = GAME_MODE.KILLER;
+    }
   }
 
   updateSpoils(spoils: Spoil[]) {
@@ -142,38 +150,44 @@ export default class GameState {
   }
 
   play() {
+    const targets: Position[] = this.balks.length > 0 ? this.balks : this.brickWalls;
+    const targetType = this.balks.length > 0 ? TILE_TYPE.BALK : TILE_TYPE.BRICK_WALL;
+    const currentWeapon = this.players[this.playerId] && this.players[this.playerId].currentWeapon;
     switch (this.gameMode) {
-      case GAME_MODE.COLLECT_BADGE:
+      case GAME_MODE.COLLECT_BADGE: {
         const collected = this.collectTarget(this.maps, this.godBadges, TILE_TYPE.BRICK_WALL, EARLY_GAME_TILE_LIMIT);
         if (collected) {
           this.gameMode = GAME_MODE.COLLECT_SPOIL;
         }
-        break;
-      case GAME_MODE.COLLECT_SPOIL:
-        const targets: Position[] = this.balks.length > 0 ? this.balks : this.brickWalls;
-        const targetType = this.balks.length > 0 ? TILE_TYPE.BALK : TILE_TYPE.BRICK_WALL;
-        const currentWeapon = this.players[this.playerId] && this.players[this.playerId].currentWeapon;
+        return;
+      }
+      case GAME_MODE.COLLECT_SPOIL: {
         if (
           (targetType === TILE_TYPE.BALK && currentWeapon === 1) ||
           (targetType === TILE_TYPE.BRICK_WALL && currentWeapon === 2)
         ) {
           onSwitchWeapon();
         }
-
-        const condition = false;
-        // const condition = this.players[this.playerId].eternalBadge > 0;
-        const readyForWedding = this.collectTarget(this.maps, targets, targetType, COLLECT_SPOIL_LIMIT, condition);
-        if (readyForWedding) {
+        const collectSpoilCondition = this.players[this.playerId].eternalBadge > 0;
+        this.collectTarget(this.maps, targets, targetType, COLLECT_SPOIL_LIMIT, collectSpoilCondition);
+        if (collectSpoilCondition) {
           onWedding();
           this.gameMode = GAME_MODE.KILLER;
         }
-        break;
-      default:
-        this.killerMode();
+        return;
+      }
+      default: {
+        if (targetType === TILE_TYPE.BRICK_WALL && currentWeapon === 2) {
+          onSwitchWeapon();
+        }
+        const { updatedMap } = updateMapsWithDangerZone(this.maps, this.bombs);
+        const limit = this.balks.length > 0 ? COLLECT_SPOIL_LIMIT : EARLY_GAME_TILE_LIMIT;
+        this.collectTarget(this.maps, targets, targetType, limit, false);
+        if (Object.keys(this.players).includes(this.playerChildId))
+          this.collectTargetChild(updatedMap, targets, targetType, limit, false);
+      }
     }
   }
-
-  killerMode() {}
 
   collectTarget(map: Maps, targets: Position[], targetType: number, limitation: number[], condition?: boolean) {
     if (condition || targets.length === 0) return true;
@@ -230,6 +244,64 @@ export default class GameState {
       setTimeout(() => {
         this.isMoving = false;
       }, directions.length * this.players[this.playerId].speed);
+      return false;
+    }
+  }
+
+  collectTargetChild(map: Maps, targets: Position[], targetType: number, limitation: number[], condition?: boolean) {
+    if (condition || targets.length === 0) return true;
+    if (this.isChildMoving) return false;
+
+    const rawSafePath = getPathToNearestSafeTile(
+      map,
+      SAFE_PATH_LIMIT,
+      this.players[this.playerChildId].currentPosition
+    );
+
+    // Avoid Bomb
+    if (rawSafePath && rawSafePath.length > 1) {
+      this.isChildMoving = true;
+      const avoidBombDirections = convertRawPath(rawSafePath);
+      driveChild(avoidBombDirections);
+      setTimeout(() => {
+        this.isChildMoving = false;
+      }, this.players[this.playerChildId].speed);
+      return false;
+    } else {
+      const rawPathToTarget = getPathToNearestItems(
+        map,
+        limitation,
+        this.players[this.playerChildId].currentPosition,
+        targets
+      );
+      if (!rawPathToTarget) return false;
+      const directions = convertRawPath(rawPathToTarget, targetType);
+      if (!directions) {
+        const faceDirection = turnPlayerFace(this.players[this.playerChildId].currentPosition, rawPathToTarget[1]);
+        if (faceDirection) {
+          this.isChildMoving = true;
+          driveChild(faceDirection);
+          setTimeout(() => {
+            driveChild(bombSetup());
+            setTimeout(() => {
+              this.isChildMoving = false;
+            }, 1000);
+          }, this.players[this.playerChildId].speed);
+        }
+        if (targetType !== TILE_TYPE.BRICK_WALL) {
+          driveChild(bombSetup());
+          setTimeout(() => {
+            this.isChildMoving = false;
+          }, this.players[this.playerChildId].delay);
+        }
+        return false;
+      }
+
+      this.isChildMoving = true;
+      driveChild(directions);
+      setTimeout(() => {
+        this.isChildMoving = false;
+      }, directions.length * this.players[this.playerChildId].speed);
       return false;
     }
   }
