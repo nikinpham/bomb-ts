@@ -43,38 +43,3 @@ export type WeaponWinds = {
   power: number;
   destination: Position;
 };
-
-export enum TAGS {
-  //  Player's tag values
-  PLAYER_TRANSFORMED = 'player:transformed',
-  PLAYER_MOVING_BANNED = 'player:moving-banned',
-  PLAYER_START_MOVING = 'player:start-moving',
-  PLAYER_STOP_MOVING = 'player:stop-moving',
-  PLAYER_BE_ISOLATED = 'player:be-isolated',
-  PLAYER_BACK_TO_PLAYGROUND = 'player:back-to-playground',
-  PLAYER_PICK_SPOIL = 'player:pick-spoil',
-  PLAYER_STUN_BY_WEAPON = 'player:stun-by-weapon',
-  PLAYER_STUN_TIMEOUT = 'player:stun-timeout',
-
-  //  Bomb's tag values
-  BOMB_EXPLODED = 'bomb:exploded',
-  BOMB_SETUP = 'bomb:setup',
-
-  //  Game's tag values
-  START_GAME = 'start-game',
-  UPDATE_DATA = 'update-data',
-
-  //  Wedding's tag values
-  PLAYER_INTO_WEDDING_ROOM = 'player:into-wedding-room',
-  PLAYER_OUTTO_WEDDING_ROOM = 'player:outto-wedding-room',
-  PLAYER_COMPLETED_WEDDING = 'player:completed-wedding',
-
-  //  Hammer's tag values
-  HAMMER_EXPLODED = 'hammer:exploded',
-
-  //  Wooden-pestle tag values
-  WOODEN_PESTLE_SETUP = 'wooden-pestle:setup',
-
-  //  WeaponWind's tag values
-  WIND_EXPLODED = 'wind:exploded'
-}

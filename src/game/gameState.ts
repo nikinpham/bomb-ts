@@ -1,5 +1,5 @@
-import { COLLECT_SPOIL_LIMIT, EARLY_GAME_TILE_LIMIT, GAME_MODE, SAFE_PATH_LIMIT, TILE_TYPE } from '../constants';
-import { Bomb, Map, Maps, Player, Position, Spoil, TAGS, TempoGameState } from '../types';
+import { COLLECT_SPOIL_LIMIT, EARLY_GAME_TILE_LIMIT, GAME_MODE, SAFE_PATH_LIMIT, TAGS, TILE_TYPE } from '../constants';
+import { Bomb, Map, Maps, Player, Position, Spoil, TempoGameState } from '../types';
 import {
   bombSetup,
   convertRawPath,
@@ -16,9 +16,12 @@ import {
 } from '../utils';
 
 export default class GameState {
+  private readonly playerId: string;
+  private readonly playerChildId: string;
+  private readonly players: { [id: string]: Player };
+
   private gameRemainTime: number;
   private mapSize: Map;
-  private readonly players: { [id: string]: Player };
   private bombs: Bomb[];
   private spoils: Spoil[];
   private balks: Position[];
@@ -26,8 +29,6 @@ export default class GameState {
   private maps: Maps;
   private tag: string | null;
   private godBadges: Position[];
-  private readonly playerId: string;
-  private readonly playerChildId: string;
 
   private gameMode: GAME_MODE;
   private isMoving: boolean;
@@ -54,11 +55,6 @@ export default class GameState {
     this.playerChildId = this.playerId + '_child';
   }
 
-  setGameRemainTime(time: number) {
-    if (this.gameRemainTime && this.gameRemainTime === time) return;
-    this.gameRemainTime = time;
-  }
-
   setMapSize(cols: number, rows: number) {
     if (this.mapSize && this.mapSize.cols === cols && this.mapSize.rows === rows) {
       return;
@@ -75,13 +71,6 @@ export default class GameState {
       return;
     }
     this.godBadges = godBadges;
-  }
-
-  updateTag(tag: string) {
-    if (tag === TAGS.PLAYER_TRANSFORMED) this.gameMode = GAME_MODE.COLLECT_SPOIL;
-    if (this.tag === tag) return;
-    this.tag = tag;
-    // console.log('TAG:', this.tag);
   }
 
   updatePlayerStats(player: Player) {
@@ -122,6 +111,8 @@ export default class GameState {
   }
 
   updateMaps(maps: Maps) {
+    this.balks = getPositionsWithValue(maps, TILE_TYPE.BALK);
+    this.brickWalls = getPositionsWithValue(maps, TILE_TYPE.BRICK_WALL);
     if (
       this.maps.length > 0 &&
       this.maps.every((row, rowIndex) => row.every((cell, colIndex) => cell === maps[rowIndex][colIndex]))
@@ -131,29 +122,21 @@ export default class GameState {
     this.maps = maps;
   }
 
-  updateBalks(maps: Maps) {
-    this.balks = getPositionsWithValue(maps, TILE_TYPE.BALK);
-  }
-  updateBrickWalls(maps: Maps) {
-    this.brickWalls = getPositionsWithValue(maps, TILE_TYPE.BRICK_WALL);
-  }
-
   update(tempoGameState: TempoGameState) {
     const { map_info, tag, gameRemainTime } = tempoGameState;
     const { size, players, map, bombs, spoils } = map_info;
 
-    this.setGameRemainTime(gameRemainTime);
+    this.gameRemainTime = gameRemainTime;
+    this.tag = tag;
+
     this.setMapSize(size.cols, size.rows);
     this.setGodBadges(map);
-    this.updateTag(tag);
     players.forEach(player => {
       this.updatePlayerStats(player);
     });
     this.updateMaps(map);
     this.updateBombs(bombs);
     this.updateSpoils(spoils);
-    this.updateBalks(map);
-    this.updateBrickWalls(map);
 
     this.play();
   }
@@ -164,10 +147,7 @@ export default class GameState {
     const currentWeapon = this.players[this.playerId] && this.players[this.playerId].currentWeapon;
     switch (this.gameMode) {
       case GAME_MODE.COLLECT_BADGE: {
-        const collected = this.collectTarget(this.maps, this.godBadges, TILE_TYPE.BRICK_WALL, EARLY_GAME_TILE_LIMIT);
-        if (collected) {
-          this.gameMode = GAME_MODE.COLLECT_SPOIL;
-        }
+        this.collectTarget(this.maps, this.godBadges, TILE_TYPE.BRICK_WALL, EARLY_GAME_TILE_LIMIT);
         return;
       }
       case GAME_MODE.COLLECT_SPOIL: {
@@ -179,9 +159,6 @@ export default class GameState {
         }
         const collectSpoilCondition = this.players[this.playerId].eternalBadge > 0;
         this.collectTarget(this.maps, targets, targetType, COLLECT_SPOIL_LIMIT, collectSpoilCondition);
-        if (collectSpoilCondition) {
-          this.gameMode = GAME_MODE.KILLER;
-        }
         return;
       }
       default: {
