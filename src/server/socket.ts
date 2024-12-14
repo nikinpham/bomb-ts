@@ -2,6 +2,7 @@ import { io as ClientIO, Socket } from 'socket.io-client';
 import dotenv from 'dotenv';
 import { EMITS } from '../constants';
 import GameState from '../game/gameState';
+import { emitTrashTalk } from '../utils';
 
 dotenv.config();
 
@@ -16,7 +17,7 @@ export const socket: Socket = ClientIO(SOCKET_URL, {
 socket.on('connect', () => {
   socket.emit(EMITS.JOIN_GAME, {
     game_id: process.env.GAME_ID,
-    player_id: process.env.PLAYER_ID
+    player_id: process.env.PLAYER_ID_JOIN_GAME
   });
 });
 
@@ -25,7 +26,7 @@ socket.on(EMITS.JOIN_GAME, res => {
     gameId: res.game_id,
     type: 2
   });
-  socket.emit(EMITS.SPEAK, { command: 't4' });
+  emitTrashTalk();
 });
 
 socket.on(EMITS.UPDATE, res => {

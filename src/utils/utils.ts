@@ -1,10 +1,8 @@
-import { ACTIONS, EMITS, TILE_TYPE } from '../constants';
-import { Bomb, Maps, Player, Position } from '../types';
-import { socket } from '../server';
+import { TILE_TYPE } from '../constants';
+import { Maps, Position, Spoil } from '../types';
 
 export const findGodBadges = (maps: Maps): Position[] => {
   const positions: Position[] = [];
-
   maps.forEach((row, rowIndex) => {
     if (row.includes(TILE_TYPE.GOD_BADGE)) {
       row.forEach((cell, colIndex) => {
@@ -14,164 +12,22 @@ export const findGodBadges = (maps: Maps): Position[] => {
       });
     }
   });
-
   return positions;
 };
 
-export const drive = (direction: string | null) => {
-  direction &&
-    socket.emit(EMITS.DRIVE, {
-      direction
-    });
-};
-
-export const driveChild = (direction: string | null) => {
-  direction &&
-    socket.emit(EMITS.DRIVE, {
-      direction,
-      characterType: 'child'
-    });
-};
-
-export const bombSetup = (facedDirection?: string | null) => `${facedDirection ?? ''}b`;
-
-// export const isHaveWedding = (playerInformation: Player) => {
-//   return false;
-// };
-
-export const getPositionsWithValue = (map: Maps, value: number) => {
-  const positions = [];
-
-  for (let row = 0; row < map.length; row++) {
-    for (let col = 0; col < map[row].length; col++) {
-      if (map[row][col] === value) {
-        positions.push({ row, col });
-      }
-    }
-  }
-
-  return positions;
-};
-
-export const onSwitchWeapon = () => {
-  socket.emit(EMITS.ACTIONS, {
-    action: ACTIONS.SWITCH_WEAPON
-  });
-  socket.emit(EMITS.ACTIONS, {
-    action: ACTIONS.SWITCH_WEAPON,
-    characterType: 'child'
-  });
-};
-export const onWedding = () => {
-  socket.emit(EMITS.ACTIONS, {
-    action: ACTIONS.MARRY_WIFE
+export const isWithinRadius = (playerPosition: Position, spoils: Spoil[], radius: number) => {
+  return spoils.filter(spoil => {
+    const distance = Math.abs(playerPosition.row - spoil.row) + Math.abs(playerPosition.col - spoil.col);
+    return distance <= radius;
   });
 };
 
-// export const updateMapsWithDangerZone = (
-//   updatedMap: Maps,
-//   bombs: Bomb[]
-// ): { updatedMap: Maps; dangerZones: Position[] } => {
-//   const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
-//   const dangerZones: Position[] = []; // Array to store danger zone positions
-//
-//   // Helper function to mark danger zones in a specific direction
-//   const markDangerZone = (startRow: number, startCol: number, deltaRow: number, deltaCol: number, power: number) => {
-//     for (let i = 1; i <= power * 2; i++) {
-//       const newRow = startRow + i * deltaRow;
-//       const newCol = startCol + i * deltaCol;
-//
-//       if (
-//         newRow >= 0 &&
-//         newRow < updatedMap.length &&
-//         newCol >= 0 &&
-//         newCol < updatedMap[newRow].length &&
-//         !limitTile.includes(updatedMap[newRow][newCol])
-//       ) {
-//         if (updatedMap[newRow][newCol] !== TILE_TYPE.BOMB_ZONE) {
-//           updatedMap[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
-//           dangerZones.push({ row: newRow, col: newCol });
-//         }
-//       } else break;
-//     }
-//   };
-//
-//   bombs.forEach((bomb: Bomb) => {
-//     const { row, col, power } = bomb;
-//
-//     // Mark danger zones in all four directions
-//     markDangerZone(row, col, 0, -1, power); // Left
-//     markDangerZone(row, col, 0, 1, power); // Right
-//     markDangerZone(row, col, -1, 0, power); // Up
-//     markDangerZone(row, col, 1, 0, power); // Down
-//
-//     // Mark the bomb's position
-//     if (updatedMap[row][col] !== TILE_TYPE.BOMB_ZONE) {
-//       updatedMap[row][col] = TILE_TYPE.BOMB_ZONE;
-//       dangerZones.push({ row, col });
-//     }
-//   });
-//
-//   return { updatedMap, dangerZones };
-// };
-
-export const extractPlayerPositionsExcluding = (players: Record<string, Player>, excludeId: string): Position[] => {
-  return Object.entries(players)
-    .filter(([id]) => id !== excludeId) // Bỏ qua phần tử có id là excludeId
-    .map(([, player]) => player.currentPosition); // Lấy vị trí
-};
-export const updateMapsWithDangerZone = (
-  updatedMap: Maps,
-  bombs: Bomb[],
-  players?: Position[]
-): { updatedMap: Maps; dangerZones: Position[] } => {
-  const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
-  const dangerZones: Position[] = []; // Array to store danger zone positions
-
-  // Helper function to mark danger zones in a square area
-  const markSquareDangerZone = (centerRow: number, centerCol: number, power: number) => {
-    for (let deltaRow = -power; deltaRow <= power + 1; deltaRow++) {
-      for (let deltaCol = -power; deltaCol <= power + 1; deltaCol++) {
-        const newRow = centerRow + deltaRow;
-        const newCol = centerCol + deltaCol;
-
-        if (
-          newRow >= 0 &&
-          newRow < updatedMap.length &&
-          newCol >= 0 &&
-          newCol < updatedMap[newRow].length &&
-          !limitTile.includes(updatedMap[newRow][newCol])
-        ) {
-          if (updatedMap[newRow][newCol] !== TILE_TYPE.BOMB_ZONE) {
-            updatedMap[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
-            dangerZones.push({ row: newRow, col: newCol });
-          }
-        }
-      }
-    }
-  };
-
-  bombs.forEach((bomb: Bomb) => {
-    const { row, col, power } = bomb;
-
-    // Mark danger zones in a square area around the bomb
-    markSquareDangerZone(row, col, power);
-
-    // Mark the bomb's position
-    if (updatedMap[row][col] !== TILE_TYPE.BOMB_ZONE) {
-      updatedMap[row][col] = TILE_TYPE.BOMB_ZONE;
-      dangerZones.push({ row, col });
-    }
-  });
-
-  players &&
-    players.forEach((player: Position) => {
-      const { row, col } = player;
-
-      // Define the range around the player (e.g., power = 1)
-      const playerDangerZonePower = 3;
-      markSquareDangerZone(row, col, playerDangerZonePower);
-    });
-
-  return { updatedMap, dangerZones };
+export const hasValueThree = (position: Position, maps: Maps) => {
+  const { row, col } = position;
+  return (
+    maps[row + 1]?.[col] === TILE_TYPE.BRICK_WALL ||
+    maps[row - 1]?.[col] === TILE_TYPE.BRICK_WALL ||
+    maps[row]?.[col + 1] === TILE_TYPE.BRICK_WALL ||
+    maps[row]?.[col - 1] === TILE_TYPE.BRICK_WALL
+  );
 };

@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { socket } from './server';
 import { io as ClientIO, Socket } from 'socket.io-client';
-import { EMITS } from './constants';
 
 dotenv.config();
 socket;
@@ -16,7 +15,7 @@ const botSocket: Socket = ClientIO(process.env.SOCKET_URL, {
 botSocket.on('connect', () => {
   botSocket.emit('join game', {
     game_id: process.env.GAME_ID,
-    player_id: 'player2-xxx'
+    player_id: 'player1-xxx'
   });
 });
 

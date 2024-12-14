@@ -1,59 +1,34 @@
-import { COLLECT_SPOIL_LIMIT, EARLY_GAME_TILE_LIMIT, GAME_MODE, SAFE_PATH_LIMIT, TAGS, TILE_TYPE } from '../constants';
+import { ACTIONS, DIRECTIONS, MOVE_DIRECTION, TAGS, TILE_TYPE, WEAPON } from '../constants';
 import { Bomb, Map, Maps, Player, Position, Spoil, TempoGameState } from '../types';
 import {
-  bombSetup,
-  convertRawPath,
   drive,
-  driveChild,
+  emitSwitchWeapon,
+  emitWedding,
+  findEscapePath,
   findGodBadges,
-  getPathToNearestItems,
-  getPathToNearestSafeTile,
-  getPositionsWithValue,
-  onSwitchWeapon,
-  onWedding,
-  turnPlayerFace,
-  updateMapsWithDangerZone
+  hasValueThree,
+  isWithinRadius
 } from '../utils';
 
+const PLAYER_ID = process.env.PLAYER_ID || 'player2-xxx';
+const PLAYER_ID_CHILD = process.env.PLAYER_ID + '_child';
+
 export default class GameState {
-  private readonly playerId: string;
-  private readonly playerChildId: string;
-  private readonly players: { [id: string]: Player };
+  constructor() {}
 
-  private gameRemainTime: number;
-  private mapSize: Map;
-  private bombs: Bomb[];
-  private spoils: Spoil[];
-  private balks: Position[];
-  private brickWalls: Position[];
-  private maps: Maps;
-  private tag: string | null;
-  private godBadges: Position[];
+  private readonly players: { [id: string]: Player } = {};
+  private gameRemainTime: number = 0;
+  private mapSize: Map = {
+    rows: 0,
+    cols: 0
+  };
+  private spoils: Spoil[] = [];
+  private maps: Maps = [];
+  private tag: string | null = null;
+  private godBadges: Position[] = [];
+  private bombs: Bomb[] = [];
 
-  private gameMode: GAME_MODE;
-  private isMoving: boolean;
-  private isChildMoving: boolean;
-
-  constructor() {
-    this.gameRemainTime = 0;
-    this.mapSize = {
-      rows: 0,
-      cols: 0
-    };
-    this.players = {};
-    this.bombs = [];
-    this.spoils = [];
-    this.maps = [];
-    this.tag = null;
-    this.godBadges = [];
-    this.isMoving = false;
-    this.isChildMoving = false;
-    this.gameMode = GAME_MODE.COLLECT_BADGE;
-    this.balks = [];
-    this.brickWalls = [];
-    this.playerId = process.env.MY_ID || '';
-    this.playerChildId = this.playerId + '_child';
-  }
+  private isMoving: boolean = false;
 
   setMapSize(cols: number, rows: number) {
     if (this.mapSize && this.mapSize.cols === cols && this.mapSize.rows === rows) {
@@ -75,44 +50,17 @@ export default class GameState {
 
   updatePlayerStats(player: Player) {
     this.players[player.id] = { ...player };
-    if (
-      this.players[this.playerId] &&
-      this.players[this.playerId].hasTransform &&
-      !Object.keys(this.players).includes(this.playerChildId)
-    )
-      this.gameMode = GAME_MODE.COLLECT_SPOIL;
-    if (
-      this.players[this.playerId] &&
-      this.players[this.playerId].eternalBadge > 0 &&
-      !Object.keys(this.players).includes(this.playerChildId)
-    ) {
-      this.gameMode = GAME_MODE.KILLER;
-      // onWedding();
+
+    if (player.id === PLAYER_ID) {
+      const currentPlayer = this.players[PLAYER_ID];
+      const childNotPresent = !Object.keys(this.players).includes(PLAYER_ID_CHILD);
+      if (currentPlayer.eternalBadge > 0 && childNotPresent) {
+        emitWedding();
+      }
     }
-  }
-
-  updateSpoils(spoils: Spoil[]) {
-    if (
-      this.spoils.every(
-        (spoil, index) =>
-          spoil.row === spoils[index].row &&
-          spoil.col === spoils[index].col &&
-          spoil.spoil_type === spoils[index].spoil_type
-      )
-    ) {
-      return;
-    }
-
-    this.spoils = spoils;
-  }
-
-  updateBombs(bombs: Bomb[]) {
-    this.bombs = bombs;
   }
 
   updateMaps(maps: Maps) {
-    this.balks = getPositionsWithValue(maps, TILE_TYPE.BALK);
-    this.brickWalls = getPositionsWithValue(maps, TILE_TYPE.BRICK_WALL);
     if (
       this.maps.length > 0 &&
       this.maps.every((row, rowIndex) => row.every((cell, colIndex) => cell === maps[rowIndex][colIndex]))
@@ -122,172 +70,320 @@ export default class GameState {
     this.maps = maps;
   }
 
+  updateBombs(bombs: Bomb[]) {
+    bombs.forEach((newBomb: Bomb) => {
+      const adjustedCreatedAt = newBomb.createdAt + 500;
+      const exists = this.bombs.some(bomb => bomb.createdAt === adjustedCreatedAt);
+      if (!exists) {
+        const updatedBomb = {
+          ...newBomb,
+          remainTime: newBomb.remainTime + this.players[PLAYER_ID].speed,
+          createdAt: adjustedCreatedAt
+        };
+        this.bombs.push(updatedBomb);
+      }
+    });
+
+    // removeExpiredBombs
+    const currentTimestamp = Date.now();
+    this.bombs = this.bombs.filter(bomb => currentTimestamp - bomb.createdAt <= 2000);
+
+    this.replaceBombExplosionOnMap();
+  }
+
   update(tempoGameState: TempoGameState) {
     const { map_info, tag, gameRemainTime } = tempoGameState;
-    const { size, players, map, bombs, spoils } = map_info;
+    const { size, players, map, spoils, bombs } = map_info;
+
+    this.setMapSize(size.cols, size.rows);
 
     this.gameRemainTime = gameRemainTime;
     this.tag = tag;
+    this.spoils = spoils;
 
-    this.setMapSize(size.cols, size.rows);
     this.setGodBadges(map);
     players.forEach(player => {
       this.updatePlayerStats(player);
     });
     this.updateMaps(map);
     this.updateBombs(bombs);
-    this.updateSpoils(spoils);
 
-    this.play();
-  }
-
-  play() {
-    const targets: Position[] = this.balks.length > 0 ? this.balks : this.brickWalls;
-    const targetType = this.balks.length > 0 ? TILE_TYPE.BALK : TILE_TYPE.BRICK_WALL;
-    const currentWeapon = this.players[this.playerId] && this.players[this.playerId].currentWeapon;
-    switch (this.gameMode) {
-      case GAME_MODE.COLLECT_BADGE: {
-        this.collectTarget(this.maps, this.godBadges, TILE_TYPE.BRICK_WALL, EARLY_GAME_TILE_LIMIT);
-        return;
+    const { action, path } = this.mainProcess();
+    switch (action) {
+      case ACTIONS.RUNNING: {
+        drive(path);
+        break;
       }
-      case GAME_MODE.COLLECT_SPOIL: {
-        if (
-          (targetType === TILE_TYPE.BALK && currentWeapon === 1) ||
-          (targetType === TILE_TYPE.BRICK_WALL && currentWeapon === 2)
-        ) {
-          onSwitchWeapon();
-        }
-        const collectSpoilCondition = this.players[this.playerId].eternalBadge > 0;
-        this.collectTarget(this.maps, targets, targetType, COLLECT_SPOIL_LIMIT, collectSpoilCondition);
-        return;
+      case ACTIONS.BOMBED: {
+        const bombPositionSlice = path ? path.slice(0, -1) : '';
+        drive(bombPositionSlice + MOVE_DIRECTION.BOMB);
+        break;
       }
-      default: {
-        if (targetType === TILE_TYPE.BRICK_WALL && currentWeapon === 2) {
-          onSwitchWeapon();
-        }
-        // const { updatedMap } = updateMapsWithDangerZone(this.maps, this.bombs);
-        const limit = this.balks.length > 0 ? COLLECT_SPOIL_LIMIT : EARLY_GAME_TILE_LIMIT;
-        this.collectTarget(this.maps, targets, targetType, limit, false);
-        // if (Object.keys(this.players).includes(this.playerChildId))
-        //   this.collectTargetChild(updatedMap, targets, targetType, limit, false);
-      }
+      default:
+        break;
     }
   }
 
-  collectTarget(map: Maps, targets: Position[], targetType: number, limitation: number[], condition?: boolean) {
-    if (condition || targets.length === 0) return true;
-    if (this.isMoving) return false;
+  mainProcess(): {
+    action: ACTIONS;
+    path: string | null;
+  } {
+    const currentPosition = this.players[PLAYER_ID].currentPosition;
 
-    const { updatedMap } = updateMapsWithDangerZone(this.maps, this.bombs);
-    const rawSafePath = getPathToNearestSafeTile(
-      updatedMap,
-      SAFE_PATH_LIMIT,
-      this.players[this.playerId].currentPosition
-    );
+    if (!this.players[PLAYER_ID].hasTransform) {
+      if (this.maps[currentPosition.row][currentPosition.col] === TILE_TYPE.GOD_BADGE) {
+        return {
+          action: ACTIONS.WAITING,
+          path: null
+        };
+      }
 
-    // Avoid Bomb
-    if (rawSafePath && rawSafePath.length > 1 && this.players[this.playerId].hasTransform) {
-      this.isMoving = true;
-      const avoidBombDirections = convertRawPath(rawSafePath);
-      drive(avoidBombDirections);
-      setTimeout(() => {
+      if (this.tag === TAGS.WOODEN_PESTLE_SETUP) {
         this.isMoving = false;
-      }, this.players[this.playerId].speed);
-      return false;
-    } else {
-      const rawPathToTarget = getPathToNearestItems(
-        map,
-        limitation,
-        this.players[this.playerId].currentPosition,
-        targets
-      );
-      if (!rawPathToTarget) return false;
-      const directions = convertRawPath(rawPathToTarget, targetType);
-      if (!directions) {
-        const faceDirection = turnPlayerFace(this.players[this.playerId].currentPosition, rawPathToTarget[1]);
-        if (faceDirection) {
+        return { action: ACTIONS.NO_ACTION, path: null };
+      }
+
+      if (this.tag === TAGS.PLAYER_STOP_MOVING) {
+        if (hasValueThree(currentPosition, this.maps)) {
           this.isMoving = true;
-          drive(faceDirection);
-          setTimeout(() => {
-            drive(bombSetup());
-            setTimeout(() => {
-              this.isMoving = false;
-            }, 1000);
-          }, this.players[this.playerId].speed);
+          return { action: ACTIONS.RUNNING, path: MOVE_DIRECTION.BOMB };
         }
-        if (targetType !== TILE_TYPE.BRICK_WALL) {
-          drive(bombSetup());
-          setTimeout(() => {
-            this.isMoving = false;
-          }, this.players[this.playerId].delay);
-        }
-        return false;
       }
 
-      this.isMoving = true;
-      drive(directions);
-      setTimeout(() => {
+      const findPathStoppingAtThree: { action: string; path: string | null } = this.findPathStoppingAtThree(
+        this.maps,
+        currentPosition
+      );
+
+      if (findPathStoppingAtThree.action === ACTIONS.RUNNING || !this.isMoving) {
+        this.isMoving = true;
+        return {
+          action: ACTIONS.RUNNING,
+          path: findPathStoppingAtThree.path
+        };
+      }
+
+      if (!hasValueThree(currentPosition, this.maps)) {
         this.isMoving = false;
-      }, directions.length * this.players[this.playerId].speed);
-      return false;
+        return { action: ACTIONS.NO_ACTION, path: null };
+      }
     }
+
+    // Switch Weapon
+    if (this.players[PLAYER_ID].currentWeapon !== WEAPON.BOMB) {
+      emitSwitchWeapon();
+      return { action: ACTIONS.NO_ACTION, path: null };
+    }
+
+    // AVOID BOMB
+    if (this.maps[currentPosition.row][currentPosition.col] === TILE_TYPE.BOMB_ZONE) {
+      const runningPath = findEscapePath(this.maps, currentPosition);
+      if (runningPath) {
+        return {
+          action: ACTIONS.RUNNING,
+          path: runningPath
+        };
+      } else {
+        return { action: ACTIONS.NO_ACTION, path: null };
+      }
+    }
+
+    // COLLECT SPOIL
+    const spoilPath = this.findSpoilAndPath(this.maps, currentPosition, this.spoils);
+    if (spoilPath) {
+      return {
+        action: ACTIONS.RUNNING,
+        path: spoilPath.path
+      };
+    }
+
+    // SETUP BOMB
+    const boxPath = this.findOptimalBombPosition(currentPosition);
+    return { action: ACTIONS.BOMBED, path: boxPath };
   }
 
-  collectTargetChild(map: Maps, targets: Position[], targetType: number, limitation: number[], condition?: boolean) {
-    if (condition || targets.length === 0) return true;
-    if (this.isChildMoving) return false;
+  replaceBombExplosionOnMap() {
+    const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
+    const currentTime = Date.now();
+    this.bombs.forEach(bomb => {
+      const { row: bombRow, col: bombCol, power, createdAt } = bomb;
+      if (currentTime - createdAt >= 35) {
+        this.maps[bombRow][bombCol] = TILE_TYPE.BOMB_ZONE;
+        DIRECTIONS.forEach(({ row: dr, col: dc }) => {
+          for (let step = 1; step <= power; step++) {
+            const newRow = bombRow + dr * step;
+            const newCol = bombCol + dc * step;
+            if (
+              newRow >= 0 &&
+              newRow < this.maps.length &&
+              newCol >= 0 &&
+              newCol < this.maps[0].length &&
+              !limitTile.includes(this.maps[newRow][newCol])
+            ) {
+              this.maps[newRow][newCol] = TILE_TYPE.BOMB_ZONE;
+            } else {
+              break;
+            }
+          }
+        });
+      }
+    });
+  }
 
-    const rawSafePath = getPathToNearestSafeTile(
-      map,
-      SAFE_PATH_LIMIT,
-      this.players[this.playerChildId].currentPosition
-    );
+  findPathStoppingAtThree = (grid: number[][], start: { row: number; col: number }) => {
+    const directions: [number, number, string][] = [
+      [1, 0, '4'],
+      [0, -1, '1'],
+      [0, 1, '2'],
+      [-1, 0, '3']
+    ];
 
-    // Avoid Bomb
-    if (rawSafePath && rawSafePath.length > 1) {
-      this.isChildMoving = true;
-      const avoidBombDirections = convertRawPath(rawSafePath);
-      driveChild(avoidBombDirections);
-      setTimeout(() => {
-        this.isChildMoving = false;
-      }, this.players[this.playerChildId].speed);
-      return false;
-    } else {
-      const rawPathToTarget = getPathToNearestItems(
-        map,
-        limitation,
-        this.players[this.playerChildId].currentPosition,
-        targets
+    const isValid = (x: number, y: number, visited: boolean[][]): boolean => {
+      const rows = grid.length;
+      const cols = grid[0].length;
+      return (
+        x >= 0 &&
+        x < rows &&
+        y >= 0 &&
+        y < cols &&
+        !visited[x][y] &&
+        (grid[x][y] === TILE_TYPE.ROAD || grid[x][y] === TILE_TYPE.BRICK_WALL || grid[x][y] === TILE_TYPE.GOD_BADGE)
       );
-      if (!rawPathToTarget) return false;
-      const directions = convertRawPath(rawPathToTarget, targetType);
-      if (!directions) {
-        const faceDirection = turnPlayerFace(this.players[this.playerChildId].currentPosition, rawPathToTarget[1]);
-        if (faceDirection) {
-          this.isChildMoving = true;
-          driveChild(faceDirection);
-          setTimeout(() => {
-            driveChild(bombSetup());
-            setTimeout(() => {
-              this.isChildMoving = false;
-            }, 1000);
-          }, this.players[this.playerChildId].speed);
+    };
+
+    type PathStep = { move: string | null; value: number; row: number; col: number };
+
+    const queue: [number, number, PathStep[]][] = [[start.row, start.col, []]]; // [row, col, path[]]
+
+    const visited: boolean[][] = Array.from({ length: grid.length }, () => Array(grid[0].length).fill(false));
+    visited[start.row][start.col] = true;
+
+    while (queue.length > 0) {
+      const [x, y, path] = queue.shift()!;
+      if (grid[x][y] === TILE_TYPE.GOD_BADGE) {
+        const fullPath: PathStep[] = [...path, { move: null, value: TILE_TYPE.GOD_BADGE, row: x, col: y }];
+        const stoppingPath: string[] = [];
+        for (const step of fullPath) {
+          if (step.value === TILE_TYPE.BRICK_WALL) {
+            return { action: ACTIONS.RUNNING, path: stoppingPath.join('') };
+          }
+          if (step.move) stoppingPath.push(step.move);
         }
-        if (targetType !== TILE_TYPE.BRICK_WALL) {
-          driveChild(bombSetup());
-          setTimeout(() => {
-            this.isChildMoving = false;
-          }, this.players[this.playerChildId].delay);
-        }
-        return false;
+        return { action: ACTIONS.RUNNING, path: stoppingPath.join('') };
       }
 
-      this.isChildMoving = true;
-      driveChild(directions);
-      setTimeout(() => {
-        this.isChildMoving = false;
-      }, directions.length * this.players[this.playerChildId].speed);
-      return false;
+      for (const [dx, dy, action] of directions) {
+        const nx = x + dx;
+        const ny = y + dy;
+
+        if (isValid(nx, ny, visited)) {
+          queue.push([nx, ny, [...path, { move: action, value: grid[x][y], row: x, col: y }]]);
+          visited[nx][ny] = true;
+        }
+      }
     }
+
+    return { action: ACTIONS.NO_ACTION, path: null };
+  };
+
+  findSpoilAndPath(map: Maps, playerPosition: Position, spoils: Spoil[]) {
+    const nearbySpoils = isWithinRadius(playerPosition, spoils, 7);
+    if (nearbySpoils.length === 0) {
+      return null;
+    }
+
+    for (const spoil of nearbySpoils) {
+      const path = this.findPathToSpoil(map, playerPosition, spoil);
+      if (path) {
+        return { spoil, path };
+      }
+    }
+
+    return null;
+  }
+
+  findPathToSpoil(map: Maps, start: Position, spoil: Spoil) {
+    const directions = [
+      { dr: 0, dc: -1, move: '1' },
+      { dr: 0, dc: 1, move: '2' },
+      { dr: -1, dc: 0, move: '3' },
+      { dr: 1, dc: 0, move: '4' }
+    ];
+
+    const queue: any = [{ row: start.row, col: start.col, path: '' }];
+    const visited = Array.from({ length: map.length }, () => Array(map[0].length).fill(false));
+    visited[start.row][start.col] = true;
+
+    while (queue.length > 0) {
+      const { row, col, path } = queue.shift();
+      if (row === spoil.row && col === spoil.col) {
+        return path;
+      }
+
+      for (const { dr, dc, move } of directions) {
+        const newRow = row + dr;
+        const newCol = col + dc;
+
+        if (
+          newRow >= 0 &&
+          newRow < map.length &&
+          newCol >= 0 &&
+          newCol < map[0].length &&
+          !visited[newRow][newCol] &&
+          map[newRow][newCol] === TILE_TYPE.ROAD
+        ) {
+          queue.push({ row: newRow, col: newCol, path: path + move });
+          visited[newRow][newCol] = true;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  findOptimalBombPosition(position: Position) {
+    const startRow = position.row;
+    const startCol = position.col;
+
+    const directions = [
+      { dr: 0, dc: -1, move: MOVE_DIRECTION.LEFT },
+      { dr: 0, dc: 1, move: MOVE_DIRECTION.RIGHT },
+      { dr: -1, dc: 0, move: MOVE_DIRECTION.UP },
+      { dr: 1, dc: 0, move: MOVE_DIRECTION.DOWN }
+    ];
+
+    const queue = [];
+    const visited = new Set();
+
+    queue.push({ row: startRow, col: startCol, path: '', distance: 0 });
+    visited.add(`${startRow},${startCol}`);
+
+    while (queue.length > 0) {
+      const current: any = queue.shift();
+      const { row, col, path, distance } = current;
+
+      if (this.maps[row][col] === TILE_TYPE.BALK) {
+        return path;
+      }
+
+      for (const { dr, dc, move } of directions) {
+        const newRow = row + dr;
+        const newCol = col + dc;
+
+        if (
+          newRow >= 0 &&
+          newRow < this.maps.length &&
+          newCol >= 0 &&
+          newCol < this.maps[0].length &&
+          !visited.has(`${newRow},${newCol}`) &&
+          (this.maps[newRow][newCol] === TILE_TYPE.ROAD || this.maps[newRow][newCol] === TILE_TYPE.BALK)
+        ) {
+          queue.push({ row: newRow, col: newCol, path: path + move, distance: distance + 1 });
+          visited.add(`${newRow},${newCol}`);
+        }
+      }
+    }
+
+    return null;
   }
 }

@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "lib": ["dom", "webworker"], // Hỗ trợ API Web Worker
     "target": "es6",
     "module": "commonjs",
     "outDir": "./dist",

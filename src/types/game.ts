@@ -17,6 +17,9 @@ export type Bomb = Position & {
   remainTime: number;
   playerId: string;
   power: number;
+  createdAt: number;
+  row: number;
+  col: number;
 };
 
 export type Spoil = Position & {
@@ -27,7 +30,6 @@ export type Spoil = Position & {
   // 34 - Nine Tusk Elephant				5 points (increases power by 1 unit)
   // 35 - Nine Spur Rooster					3 score
   // 36 - Nine Mane Hair Horse			4 score
-  // 37 - Holy Spirit Stone					3 score
 };
 
 export type WeaponHammer = {
