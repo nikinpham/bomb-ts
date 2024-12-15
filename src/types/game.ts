@@ -3,7 +3,7 @@ export type Position = {
   col: number;
 };
 
-export type PositionWithValue = Position & { value: number };
+export type PositionWithValue = Position & { value: number; move: string | null };
 export type Directions = [number, number, string][];
 
 export type Maps = number[][];

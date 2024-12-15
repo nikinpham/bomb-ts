@@ -1,12 +1,13 @@
-import { ACTIONS, DIRECTIONS, MOVE_DIRECTION, TAGS, TILE_TYPE, WEAPON } from '../constants';
+import { ACTIONS, DIRECTIONS, LIMITATION_GOD_BADGE, MOVE_DIRECTION, TAGS, TILE_TYPE } from '../constants';
 import { Bomb, Map, Maps, Player, Position, Spoil, TempoGameState } from '../types';
 import {
+  checkTargetOpposite,
   drive,
   emitSwitchWeapon,
   emitWedding,
+  findAllItemsByType,
   findEscapePath,
-  findGodBadges,
-  hasValueThree,
+  findPathToTargets,
   isWithinRadius
 } from '../utils';
 
@@ -29,6 +30,7 @@ export default class GameState {
   private bombs: Bomb[] = [];
 
   private isMoving: boolean = false;
+  private needTurned: boolean = false;
 
   setMapSize(cols: number, rows: number) {
     if (this.mapSize && this.mapSize.cols === cols && this.mapSize.rows === rows) {
@@ -38,7 +40,7 @@ export default class GameState {
   }
 
   setGodBadges(maps: Maps) {
-    const godBadges = findGodBadges(maps);
+    const godBadges = findAllItemsByType(maps, TILE_TYPE.GOD_BADGE);
     if (
       this.godBadges?.length === godBadges.length &&
       this.godBadges.every((badge, index) => badge.row === godBadges[index].row && badge.col === godBadges[index].col)
@@ -101,6 +103,10 @@ export default class GameState {
     this.tag = tag;
     this.spoils = spoils;
 
+    if (this.tag === TAGS.PLAYER_TRANSFORMED) {
+      emitSwitchWeapon();
+    }
+
     this.setGodBadges(map);
     players.forEach(player => {
       this.updatePlayerStats(player);
@@ -129,51 +135,79 @@ export default class GameState {
     path: string | null;
   } {
     const currentPosition = this.players[PLAYER_ID].currentPosition;
+    if (this.isMoving) {
+      this.isMoving = false;
+      return { action: ACTIONS.NO_ACTION, path: null };
+    }
 
+    // Collect God Badge
     if (!this.players[PLAYER_ID].hasTransform) {
-      if (this.maps[currentPosition.row][currentPosition.col] === TILE_TYPE.GOD_BADGE) {
-        return {
-          action: ACTIONS.WAITING,
-          path: null
-        };
-      }
-
       if (this.tag === TAGS.WOODEN_PESTLE_SETUP) {
         this.isMoving = false;
         return { action: ACTIONS.NO_ACTION, path: null };
       }
 
-      if (this.tag === TAGS.PLAYER_STOP_MOVING) {
-        if (hasValueThree(currentPosition, this.maps)) {
-          this.isMoving = true;
-          return { action: ACTIONS.RUNNING, path: MOVE_DIRECTION.BOMB };
+      const pathToGodBadge = findPathToTargets(this.maps, LIMITATION_GOD_BADGE, currentPosition, this.godBadges);
+      const { action, path } = pathToGodBadge;
+
+      this.isMoving = true;
+
+      if (action === ACTIONS.RUNNING && path?.length) {
+        const lastMove = path[path.length - 1];
+
+        if (path.length === 1) {
+          const isBrickWall = checkTargetOpposite(this.maps, currentPosition, TILE_TYPE.BRICK_WALL, lastMove);
+          if (isBrickWall && this.needTurned) {
+            this.needTurned = false;
+            return { action: ACTIONS.RUNNING, path: MOVE_DIRECTION.BOMB };
+          }
+          this.needTurned = true;
+        } else {
+          this.needTurned = false;
         }
-      }
-
-      const findPathStoppingAtThree: { action: string; path: string | null } = this.findPathStoppingAtThree(
-        this.maps,
-        currentPosition
-      );
-
-      if (findPathStoppingAtThree.action === ACTIONS.RUNNING || !this.isMoving) {
-        this.isMoving = true;
         return {
           action: ACTIONS.RUNNING,
-          path: findPathStoppingAtThree.path
+          path
         };
       }
-
-      if (!hasValueThree(currentPosition, this.maps)) {
-        this.isMoving = false;
-        return { action: ACTIONS.NO_ACTION, path: null };
-      }
     }
 
-    // Switch Weapon
-    if (this.players[PLAYER_ID].currentWeapon !== WEAPON.BOMB) {
-      emitSwitchWeapon();
-      return { action: ACTIONS.NO_ACTION, path: null };
-    }
+    // const balks = findAllItemsByType(this.maps, TILE_TYPE.BALK);
+    // const rawPathToBalk = findPathToNearestItems(this.maps, LIMITATION_BALK, currentPosition, balks);
+    //
+    // const noPathToBalk = balks.length > 0 && !rawPathToBalk && this.players[PLAYER_ID].currentWeapon === WEAPON.BOMB;
+    // const canDestroyBalk = rawPathToBalk && this.players[PLAYER_ID].currentWeapon !== WEAPON.BOMB;
+    //
+    // if (canDestroyBalk || noPathToBalk) {
+    //   emitSwitchWeapon();
+    //   return { action: ACTIONS.NO_ACTION, path: null };
+    // }
+    //
+    // const bricks = findAllItemsByType(this.maps, TILE_TYPE.BRICK_WALL);
+    // const pathToBricks = findPathToTargets(this.maps, LIMITATION_BRICK, currentPosition, bricks);
+    //
+    // if (pathToBricks) {
+    //   this.isMoving = true;
+    //   const { action: escapeAction, path: escapePath } = pathToBricks;
+    //   if (escapeAction === ACTIONS.RUNNING && escapePath?.length) {
+    //     const lastMove = escapePath[escapePath.length - 1];
+    //
+    //     if (escapePath.length === 1) {
+    //       const isBrickWall = checkTargetOpposite(this.maps, currentPosition, TILE_TYPE.BRICK_WALL, lastMove);
+    //       if (isBrickWall && this.needTurned) {
+    //         this.needTurned = false;
+    //         return { action: ACTIONS.RUNNING, path: MOVE_DIRECTION.BOMB };
+    //       }
+    //       this.needTurned = true;
+    //     } else {
+    //       this.needTurned = false;
+    //     }
+    //     return {
+    //       action: ACTIONS.RUNNING,
+    //       path: escapePath
+    //     };
+    //   }
+    // }
 
     // AVOID BOMB
     if (this.maps[currentPosition.row][currentPosition.col] === TILE_TYPE.BOMB_ZONE) {
@@ -229,62 +263,6 @@ export default class GameState {
       }
     });
   }
-
-  findPathStoppingAtThree = (grid: number[][], start: { row: number; col: number }) => {
-    const directions: [number, number, string][] = [
-      [1, 0, '4'],
-      [0, -1, '1'],
-      [0, 1, '2'],
-      [-1, 0, '3']
-    ];
-
-    const isValid = (x: number, y: number, visited: boolean[][]): boolean => {
-      const rows = grid.length;
-      const cols = grid[0].length;
-      return (
-        x >= 0 &&
-        x < rows &&
-        y >= 0 &&
-        y < cols &&
-        !visited[x][y] &&
-        (grid[x][y] === TILE_TYPE.ROAD || grid[x][y] === TILE_TYPE.BRICK_WALL || grid[x][y] === TILE_TYPE.GOD_BADGE)
-      );
-    };
-
-    type PathStep = { move: string | null; value: number; row: number; col: number };
-
-    const queue: [number, number, PathStep[]][] = [[start.row, start.col, []]]; // [row, col, path[]]
-
-    const visited: boolean[][] = Array.from({ length: grid.length }, () => Array(grid[0].length).fill(false));
-    visited[start.row][start.col] = true;
-
-    while (queue.length > 0) {
-      const [x, y, path] = queue.shift()!;
-      if (grid[x][y] === TILE_TYPE.GOD_BADGE) {
-        const fullPath: PathStep[] = [...path, { move: null, value: TILE_TYPE.GOD_BADGE, row: x, col: y }];
-        const stoppingPath: string[] = [];
-        for (const step of fullPath) {
-          if (step.value === TILE_TYPE.BRICK_WALL) {
-            return { action: ACTIONS.RUNNING, path: stoppingPath.join('') };
-          }
-          if (step.move) stoppingPath.push(step.move);
-        }
-        return { action: ACTIONS.RUNNING, path: stoppingPath.join('') };
-      }
-
-      for (const [dx, dy, action] of directions) {
-        const nx = x + dx;
-        const ny = y + dy;
-
-        if (isValid(nx, ny, visited)) {
-          queue.push([nx, ny, [...path, { move: action, value: grid[x][y], row: x, col: y }]]);
-          visited[nx][ny] = true;
-        }
-      }
-    }
-
-    return { action: ACTIONS.NO_ACTION, path: null };
-  };
 
   findSpoilAndPath(map: Maps, playerPosition: Position, spoils: Spoil[]) {
     const nearbySpoils = isWithinRadius(playerPosition, spoils, 7);
