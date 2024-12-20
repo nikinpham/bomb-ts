@@ -34,5 +34,8 @@ socket.on(EMITS.UPDATE, res => {
 });
 
 socket.on(EMITS.DRIVE, res => {
-  console.log(res);
+  console.log(
+    `[Socket] drive-player responsed, res:  { direction: '${res.direction}', player_id: '${res.player_id}' }`
+  );
+  gameState.onPlayerStop(res);
 });

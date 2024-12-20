@@ -7,6 +7,7 @@ export type PositionWithValue = Position & { value: number; move: string | null 
 export type Directions = [number, number, string][];
 
 export type Maps = number[][];
+export type FlatMap = number[];
 
 export type Map = {
   cols: number;
@@ -44,4 +45,16 @@ export type WeaponWinds = {
   currentCol: number;
   power: number;
   destination: Position;
+};
+
+export type TreeNode = {
+  val: number;
+  dir: string | null;
+  parent: TreeNode | null;
+  boxes: number;
+  isolatedBoxes: number;
+  distance: number;
+  bonusPoints: number;
+  playerFootprint: boolean;
+  children: TreeNode[];
 };

@@ -1,5 +1,5 @@
 import { MOVE_DIRECTION, TILE_TYPE } from '../constants';
-import { Maps, Position, Spoil } from '../types';
+import { Maps, Position, Spoil, TreeNode } from '../types';
 
 export const getDirection = (current: Position, next: Position): string => {
   if (current.row === next.row && current.col > next.col) return '1'; //  RIGHT
@@ -44,7 +44,6 @@ export const checkTargetOpposite = (maps: Maps, position: Position, target: numb
   const { row, col } = position;
   switch (currentSide) {
     case MOVE_DIRECTION.LEFT:
-      console.log(row, col - 1);
       return maps[row]?.[col - 1] === target; // Kiểm tra ô bên trái
     case MOVE_DIRECTION.RIGHT:
       return maps[row]?.[col + 1] === target; // Kiểm tra ô bên phải
@@ -55,4 +54,28 @@ export const checkTargetOpposite = (maps: Maps, position: Position, target: numb
     default:
       return false; // Nếu không thuộc hướng nào, trả về false
   }
+};
+
+export const to1dPos = (x: number, y: number, mapWidth: number) => {
+  const cols = mapWidth;
+  return y * cols + x;
+};
+
+export const canWalkThrough = (bombTime: number, distance: number) => {
+  return distance * 430 + 450 < bombTime;
+};
+
+export const to2dPos = (pos: number, mapWidth: number) => {
+  const cols = mapWidth;
+  const y = Math.floor(pos / cols);
+  const x = pos % cols;
+  return [x, y];
+};
+
+export const getPathFromRoot = (node: TreeNode): string => {
+  if (!node.parent) {
+    return '';
+  }
+
+  return getPathFromRoot(node.parent) + node.dir;
 };

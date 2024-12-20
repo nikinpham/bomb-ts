@@ -19,4 +19,10 @@ export type TempoGameState = {
   };
   tag: string;
   gameRemainTime: number;
+  player_id: string;
+};
+
+export type DrivePlayerResponse = {
+  direction: string;
+  player_id: string;
 };
