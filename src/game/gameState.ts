@@ -78,6 +78,7 @@ export default class GameState {
   private haltSignal: boolean = false;
   private haltSignalTime: number = -1;
   private idleStart: number = Date.now();
+  private lastAttackTime = Date.now();
 
   //ONLY FOR TESTING
   private lives: number = 5;
@@ -122,6 +123,7 @@ export default class GameState {
 
   updateOpponents(players: Player[], myPlayIds: string[] = []) {
     this.opponentsPositions = new Set<number>();
+
     const opponents = players.filter(p => !myPlayIds.includes(p.id));
     for (let opponent of opponents) {
       const p = opponent.currentPosition;
@@ -173,16 +175,11 @@ export default class GameState {
         }
       }
       if (tag === 'player:moving-banned') {
-        // if (this.canMoveHandler) {
-        //   clearTimeout(this.canMoveHandler);
-        //   this.canMoveHandler = null;
-        // }
         this.canMove = true;
         this.roadMap = [];
         this.recheckCanBomb(bombs);
       } else if (tag === 'bomb:setup') {
         this.canBomb = false;
-        //const delay = 2000; //this.player?.playerInfo?.delay ?? 2000;
         const delay = this.players[PLAYER_ID]?.delay ?? 2000;
         setTimeout(() => (this.canBomb = true), delay);
       }
@@ -194,8 +191,8 @@ export default class GameState {
       if (res.direction === 'x') {
         this.haltSignal = false;
         this.waitForNextStop = true;
-        //this.roadMap = [];
-        //this.recheckCanBomb();
+        // this.roadMap = [];
+        // this.recheckCanBomb();
       }
     }
   }
@@ -207,18 +204,6 @@ export default class GameState {
     this.rottenBoxes = new Set();
     this.newOpponentBombs = [];
     this.bombMap = new Map();
-    // bombs.forEach((newBomb: Bomb) => {
-    //   const adjustedCreatedAt = newBomb.createdAt + 500;
-    //   const exists = this.bombs.some(bomb => bomb.createdAt === adjustedCreatedAt);
-    //   if (!exists) {
-    //     const updatedBomb = {
-    //       ...newBomb,
-    //       remainTime: newBomb.remainTime + this.players[PLAYER_ID].speed,
-    //       createdAt: adjustedCreatedAt
-    //     };
-    //     this.bombs.push(updatedBomb);
-    //   }
-    // });
     this.rawBombs = [...bombs];
     bombs.sort((a, b) => b.remainTime - a.remainTime);
     for (let bomb of bombs) {
@@ -309,11 +294,6 @@ export default class GameState {
         firstDistance = spot.distance;
         continue;
       }
-      // if (!foundOpponentEgg && spot.attackThis && spot.distance < firstDistance + MinimumDistance) {
-      //   foundOpponentEgg = true;
-      //   goodSpot = spot;
-      //   continue;
-      // }
       const points = spot.bonusPoints;
       const goodSpotPoints = goodSpot.bonusPoints;
       if (
@@ -371,7 +351,7 @@ export default class GameState {
     this.lives = currentPlayerTemp.lives;
     ////
     this.updateMaps(map);
-    this.updateOpponents(players, Object.keys(this.players));
+    this.updateOpponents(players, [PLAYER_ID]);
     this.updateBombs(bombs);
     const currentPlayer = this.players[PLAYER_ID];
     const currentPlayerPosition = currentPlayer?.currentPosition;
@@ -384,31 +364,18 @@ export default class GameState {
         break;
       }
       case ACTIONS.BOMBED: {
-        // const bombPositionSlice = path ? path.slice(0, -1) : '';
-        // drive(bombPositionSlice + MOVE_DIRECTION.BOMB);
         if (this.roadMap[0] === currentPlayerPosition1P) {
-          //logger.info(this.player.position);
           this.roadMap.shift();
           this.idleStart = Date.now();
 
           if (this.roadMap.length === 0) {
-            //logger.info('reach destination...');
             this.recheckCanBomb(bombs);
           }
         }
         if (this.roadMap.length && Date.now() - this.idleStart > TIME_IN_ONE_CELL) {
-          //if (
-          //    !this.haltSignal &&
-          //    !this.waitForNextStop &&
-          //    this.roadMap.length &&
-          //    Date.now() - this.idleStart > TimeInOneCell
-          //) {
           console.log('idling... reset the destination');
           this.roadMap = [];
           this.recheckCanBomb(bombs);
-          //this.haltSignal = true;
-          //this.socket.emit('drive player', { direction: 'x' });
-          //this.haltSignalTime = Date.now();
         }
         if (this.waitForNextStop && Date.now() - this.haltSignalTime > TIME_IN_ONE_CELL) {
           this.waitForNextStop = false;
@@ -484,50 +451,11 @@ export default class GameState {
       }
     }
 
-    // const balks = findAllItemsByType(this.maps, TILE_TYPE.BALK);
-    // const rawPathToBalk = findPathToNearestItems(this.maps, LIMITATION_BALK, currentPosition, balks);
-    //
-    // const noPathToBalk = balks.length > 0 && !rawPathToBalk && this.players[PLAYER_ID].currentWeapon === WEAPON.BOMB;
-    // const canDestroyBalk = rawPathToBalk && this.players[PLAYER_ID].currentWeapon !== WEAPON.BOMB;
-    //
-    // if (canDestroyBalk || noPathToBalk) {
-    //   emitSwitchWeapon();
-    //   return { action: ACTIONS.NO_ACTION, path: null };
-    // }
-    //
-    // const bricks = findAllItemsByType(this.maps, TILE_TYPE.BRICK_WALL);
-    // const pathToBricks = findPathToTargets(this.maps, LIMITATION_BRICK, currentPosition, bricks);
-    //
-    // if (pathToBricks) {
-    //   this.isMoving = true;
-    //   const { action: escapeAction, path: escapePath } = pathToBricks;
-    //   if (escapeAction === ACTIONS.RUNNING && escapePath?.length) {
-    //     const lastMove = escapePath[escapePath.length - 1];
-    //
-    //     if (escapePath.length === 1) {
-    //       const isBrickWall = checkTargetOpposite(this.maps, currentPosition, TILE_TYPE.BRICK_WALL, lastMove);
-    //       if (isBrickWall && this.needTurned) {
-    //         this.needTurned = false;
-    //         return { action: ACTIONS.RUNNING, path: MOVE_DIRECTION.BOMB };
-    //       }
-    //       this.needTurned = true;
-    //     } else {
-    //       this.needTurned = false;
-    //     }
-    //     return {
-    //       action: ACTIONS.RUNNING,
-    //       path: escapePath
-    //     };
-    //   }
-    // }
-
     if (this.roadMap[0] === currentPositionFlat) {
-      //logger.info(this.player.position);
       this.roadMap.shift();
       this.idleStart = Date.now();
 
       if (this.roadMap.length === 0) {
-        //logger.info('reach destination...');
         this.recheckCanBomb(this.rawBombs);
       }
     }
@@ -543,18 +471,6 @@ export default class GameState {
       this.roadMap = [];
       this.recheckCanBomb(this.rawBombs);
     }
-    // AVOID BOMB
-    // if (this.maps[currentPosition.row][currentPosition.col] === TILE_TYPE.BOMB_ZONE) {
-    //   const runningPath = findEscapePath(this.maps, currentPosition);
-    //   if (runningPath) {
-    //     return {
-    //       action: ACTIONS.RUNNING,
-    //       path: runningPath
-    //     };
-    //   } else {
-    //     return { action: ACTIONS.NO_ACTION, path: null };
-    //   }
-    // }
 
     // COLLECT SPOIL
     // const spoilPath = this.findSpoilAndPath(this.maps, currentPosition, this.spoils);
@@ -574,9 +490,19 @@ export default class GameState {
     if (!this.roadMap.length) {
       const isInDanger = this.bombSpots.has(currentPositionFlat);
       if (isInDanger) {
+        const node = this.gotoSafePlace();
+        if (node) {
+          const path = getPathFromRoot(node);
+          this.storeRoadMap([node]);
+          return {
+            action: ACTIONS.RUNNING,
+            path
+          };
+        }
       }
       if (this.canBomb) {
         const node = this.findOptimalBombPosition(currentPosition);
+        console.log('go here');
         if (node) {
           const extendPath = this.findSafePlace(
             node.val,
@@ -586,17 +512,27 @@ export default class GameState {
           if (extendPath) {
             let direction = getPathFromRoot(node);
             const tailPath = getPathFromRoot(extendPath);
-            drive(direction + 'b' + tailPath);
+            // drive(direction + 'b' + tailPath);
             this.storeRoadMap([extendPath, node]);
             return { action: ACTIONS.RUNNING, path: direction + 'b' + tailPath };
           }
+        }
+      }
+      //Find good spot while idling
+      const goodSpot = this.findGoodSpot(currentPositionFlat);
+      if (goodSpot) {
+        console.log('good spot');
+        const path = getPathFromRoot(goodSpot);
+        if (path) {
+          this.storeRoadMap([goodSpot]);
+          return { action: ACTIONS.RUNNING, path };
         }
       }
     }
     return { action: ACTIONS.RUNNING, path: null };
   }
 
-  scanRawMap(startNode: TreeNode, map: FlatMap, callback: (node: TreeNode) => [boolean, boolean]) {
+  scanRawMap(startNode: TreeNode, map: FlatMap, callback: (node: TreeNode) => [boolean | null, boolean]) {
     const queue = [startNode];
     const visited = new Set([startNode.val]);
     while (queue.length) {
@@ -632,84 +568,64 @@ export default class GameState {
     return null;
   }
 
-  // getAvoidBomb(startNode: TreeNode, map: number[], bombSpots: Set<number>) {
-  //   const goodSpots = new Set();
-  //   let limit = 20;
-  //   this.scanRawMap(startNode, map, (currentNode: TreeNode) => {
-  //     const loc = currentNode.val;
-  //     if (this.opponentsPositions.has(loc)) {
-  //       return [null, true];
-  //     }
-  //     if (startNode.val !== loc && this.bombPositions.has(loc)) {
-  //       return [null, true];
-  //     }
-  //     if (startNode.val !== loc && this.bombDangers.has(loc)) {
-  //       return [null, true];
-  //     }
-  //     if (!bombSpots.has(loc)) {
-  //       this.countBoxHits(currentNode);
-  //       const isGoodSpot1 = currentNode.boxes > 0 || currentNode.isolatedBoxes > 0;
+  getAvoidBomb(startNode: TreeNode, map: number[], bombSpots: Set<number>) {
+    const goodSpots = new Set<TreeNode>();
+    let limit = 20;
+    this.scanRawMap(startNode, map, (currentNode: TreeNode) => {
+      const loc = currentNode.val;
+      if (this.opponentsPositions.has(loc)) {
+        return [null, true];
+      }
+      if (startNode.val !== loc && this.bombPositions.has(loc)) {
+        return [null, true];
+      }
+      if (startNode.val !== loc && this.bombDangers.has(loc)) {
+        return [null, true];
+      }
+      if (!bombSpots.has(loc)) {
+        this.countBoxHits(currentNode);
+        const isGoodSpot1 = currentNode.boxes > 0 || currentNode.isolatedBoxes > 0;
 
-  //       if (goodSpots.size === 0 || isGoodSpot1) {
-  //         goodSpots.add(currentNode);
-  //       }
+        if (goodSpots.size === 0 || isGoodSpot1) {
+          goodSpots.add(currentNode);
+        }
 
-  //       if (--limit <= 0) {
-  //         return [true, false];
-  //       }
-  //     }
-  //     return [null, false];
-  //   });
+        if (--limit <= 0) {
+          return [true, false];
+        }
+      }
+      return [null, false];
+    });
 
-  //   let limitDistance = Infinity;
-  //   if (this.pivotNode) {
-  //     limitDistance = this.pivotNode.distance + AroundPivotLimit;
-  //   }
-  //   let goodSpot = null;
-  //   let foundOpponentEgg = false;
-  //   for (let spot of goodSpots) {
-  //     if (!foundOpponentEgg && spot.attackThis) {
-  //       foundOpponentEgg = true;
-  //       goodSpot = spot;
-  //       continue;
-  //     }
-  //     if (!goodSpot) {
-  //       goodSpot = spot;
-  //       continue;
-  //     }
+    let limitDistance = Infinity;
+    let goodSpot = null;
+    let foundOpponentEgg = false;
+    for (let spot of goodSpots) {
+      if (!goodSpot) {
+        goodSpot = spot;
+        continue;
+      }
 
-  //     if (spot.distance > limitDistance) {
-  //       break;
-  //     }
+      if (spot.distance > limitDistance) {
+        break;
+      }
 
-  //     const points = spot.boxes + spot.bonusPoints;
-  //     if (goodSpot.boxes + goodSpot.bonusPoints < points) {
-  //       goodSpot = spot;
-  //     }
-  //   }
-  //   return goodSpot;
-  // }
+      const points = spot.boxes + spot.bonusPoints;
+      if (goodSpot.boxes + goodSpot.bonusPoints < points) {
+        goodSpot = spot;
+      }
+    }
+    return goodSpot;
+  }
 
-  // gotoSafePlace() {
-  //   console.log('Go to safe place');
-  //   const myPlayer = this.players[PLAYER_ID];
-  //   const currentPosition = to1dPos(myPlayer.currentPosition.col, myPlayer.currentPosition.row, this.mapSize.cols);
-  //   const root = this.createTreeNode(currentPosition, null, null);
-  //   let node = this.getAvoidBomb(root, this.flatMap, this.bombSpots);
-  //   if (!node) {
-  //     node = this.getAvoidBomb(root, this.flatMap, this.bombSpots, true);
-  //   }
-  //   if (!node) {
-  //     node = this.getAvoidBomb(root, this.flatMap, this.bombSpots, true, true);
-  //   }
-
-  //   if (node) {
-  //     //console.log('extend path', extendPath);
-  //     const path = getPathFromRoot(node);
-  //     this.drivePlayer(path, node);
-  //     this.storeRoadMap([node]);
-  //   }
-  // }
+  gotoSafePlace() {
+    console.log('Go to safe place');
+    const myPlayer = this.players[PLAYER_ID];
+    const currentPosition = to1dPos(myPlayer.currentPosition.col, myPlayer.currentPosition.row, this.mapSize.cols);
+    const root = this.createTreeNode(currentPosition, null, null);
+    let node = this.getAvoidBomb(root, this.flatMap, this.bombSpots);
+    return node;
+  }
 
   replaceBombExplosionOnMap() {
     const limitTile = [TILE_TYPE.WALL, TILE_TYPE.PRISON_PLACE, TILE_TYPE.BALK, TILE_TYPE.BRICK_WALL];
@@ -879,7 +795,6 @@ export default class GameState {
     while (queue.length > 0) {
       const current: TreeNode = queue.shift()!;
       const val = current.val;
-
       if (this.opponentsPositions.has(val)) {
         continue;
       }
@@ -920,21 +835,117 @@ export default class GameState {
     for (let spot of attackSpots) {
       if (!goodSpot) {
         goodSpot = spot;
-        // console.log("goodSpot", goodSpot);
         continue;
       }
-      // const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
-      // const isUsingBomb = this.player.playerInfo.currentWeapon === Weapons.Bomb;
+      const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
       if (
-        spot.distance < 30 &&
-        spot.playerFootprint
-        // isAllowedAttack &&
+        spot.distance < 20 &&
+        spot.playerFootprint &&
+        isAllowedAttack
         // isUsingBomb
       ) {
-        // this.lastAttackTime = Date.now();
+        this.lastAttackTime = Date.now();
         goodSpot = spot;
         console.log('found opponent', to2dPos(goodSpot.val, this.mapSize.cols));
         break;
+      }
+    }
+    return goodSpot;
+  }
+
+  checkForGoodSpot(spot: TreeNode, goodSpot: TreeNode) {
+    // let points = spot.boxes * spot.isolatedBoxes * 0.5;
+    // let goodSpotPoints = goodSpot.boxes * goodSpot.isolatedBoxes * 0.5;
+    // if (!this.isFullPower()) {
+    //   points =
+    //     spot.boxes * 0.7 + spot.bonusPoints * 0.2 * spot.isolatedBoxes * 0.5;
+    //   goodSpotPoints =
+    //     goodSpot.boxes * 0.7 +
+    //     goodSpot.bonusPoints * 0.2 * goodSpot.isolatedBoxes * 0.5;
+    // }
+    const points = spot.boxes * 0.7 + spot.bonusPoints * 0.2 * spot.isolatedBoxes * 0.5;
+    const goodSpotPoints = goodSpot.boxes * 0.7 + goodSpot.bonusPoints * 0.2 * goodSpot.isolatedBoxes * 0.5;
+    return goodSpotPoints < points;
+  }
+
+  findGoodSpot(position: number) {
+    const goodSpots = [];
+    const badSpots = [];
+
+    let limitDistance = Infinity;
+    // if (this.pivotNode) {
+    //   limitDistance = this.pivotNode.distance + AroundPivotLimit;
+    // }
+
+    const map = this.flatMap;
+    const startNode = this.createTreeNode(position);
+    const queue = [startNode];
+    const visited = new Set([position]);
+    while (queue.length) {
+      const currentNode = queue.shift()!;
+      const p = currentNode.val;
+
+      if (currentNode.distance > limitDistance) {
+        break;
+      }
+
+      if (this.opponentsPositions.has(p)) {
+        continue;
+      }
+      if (p !== position && this.bombPositions.has(p)) {
+        continue;
+      }
+
+      if (this.bombMap.has(p)) {
+        const bombTime = this.bombMap.get(p)!;
+        if (!canWalkThrough(bombTime, currentNode.distance)) {
+          continue;
+        }
+      }
+      this.countBoxHits(currentNode);
+      if (
+        !goodSpots.length ||
+        currentNode.bonusPoints ||
+        currentNode.boxes ||
+        currentNode.isolatedBoxes > 1 ||
+        currentNode.playerFootprint
+      ) {
+        if (!this.bombSpots.has(p)) {
+          goodSpots.push(currentNode);
+        } else {
+          badSpots.push(currentNode);
+        }
+      }
+
+      const neighbors = this.getNeighborNodes(currentNode.val, this.mapSize.cols);
+      for (let idx in neighbors) {
+        const neighbor = neighbors[idx];
+        const cellValue = map[neighbor];
+        if (cellValue === TILE_TYPE.ROAD) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            const dir = parseInt(idx, 10) + 1;
+            const neighborNode = this.createTreeNode(neighbor, dir.toString(), currentNode);
+            currentNode.children.push(neighborNode);
+            queue.push(neighborNode);
+          }
+        }
+      }
+    }
+
+    let goodSpot = null;
+    for (let spot of goodSpots) {
+      if (!goodSpot) {
+        goodSpot = spot;
+        continue;
+      }
+      if (this.checkForGoodSpot(spot, goodSpot)) {
+        goodSpot = spot;
+      }
+    }
+    if (!goodSpot) {
+      for (let spot of badSpots) {
+        goodSpot = spot;
       }
     }
     return goodSpot;
