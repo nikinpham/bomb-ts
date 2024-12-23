@@ -6,6 +6,7 @@ import {
   LIMITATION_GOD_BADGE,
   MINIMUM_DISTANCE,
   MOVE_DIRECTION,
+  PLAYER_DIRECTION,
   TAGS,
   TILE_TYPE,
   TIME_IN_ONE_CELL
@@ -20,13 +21,15 @@ import {
   Position,
   Spoil,
   TempoGameState,
-  TreeNode
+  TreeNode,
+  WeaponPlace
 } from '../types';
 import {
   canWalkThrough,
   checkTargetOpposite,
   drive,
   emitSwitchWeapon,
+  emitUseSpecialSkill,
   emitWedding,
   findAllItemsByType,
   findEscapePath,
@@ -59,6 +62,7 @@ export default class GameState {
   private bombDangers = new Set<number>();
   private rottenBoxes = new Set<number>();
   private opponentsPositions = new Set<number>();
+  private opponentsPositionsRaw: Position[] = [];
   private tag: string | null = null;
   private godBadges: Position[] = [];
   private bombs: Bomb[] = [];
@@ -79,7 +83,14 @@ export default class GameState {
   private haltSignalTime: number = -1;
   private idleStart: number = Date.now();
   private lastAttackTime = Date.now();
+  private lastCalculateSpecialSkill = Date.now();
+  private lastUseSpecialSkillTime = Date.now();
+  private weaponDropped: Position | null = null;
 
+  private hasMarried: boolean = false;
+  private gameLocked: boolean = false;
+  private currentDirection: PLAYER_DIRECTION = PLAYER_DIRECTION.DOWN;
+  private lastPosition: Position | null = null;
   //ONLY FOR TESTING
   private lives: number = 5;
 
@@ -107,12 +118,27 @@ export default class GameState {
     if (player.id === PLAYER_ID) {
       const currentPlayer = this.players[PLAYER_ID];
       const childNotPresent = !Object.keys(this.players).includes(PLAYER_ID_CHILD);
+      if (currentPlayer?.currentPosition) {
+        this.calculateDirection(currentPlayer.currentPosition);
+      }
       if (currentPlayer.eternalBadge > 0 && childNotPresent) {
         // emitWedding();
       }
       if (currentPlayer.hasTransform && currentPlayer.currentWeapon === 1) {
         emitSwitchWeapon();
       }
+    }
+  }
+
+  checkWeaponDropped(weaponPlaces: WeaponPlace[]) {
+    const myWeapon = weaponPlaces.find(p => PLAYER_ID.includes(p.playerId));
+    if (myWeapon) {
+      this.weaponDropped = {
+        row: myWeapon.row,
+        col: myWeapon.col
+      };
+    } else {
+      this.weaponDropped = null;
     }
   }
 
@@ -123,12 +149,36 @@ export default class GameState {
 
   updateOpponents(players: Player[], myPlayIds: string[] = []) {
     this.opponentsPositions = new Set<number>();
-
+    this.opponentsPositionsRaw = [];
     const opponents = players.filter(p => !myPlayIds.includes(p.id));
     for (let opponent of opponents) {
       const p = opponent.currentPosition;
+      this.opponentsPositionsRaw.push(p);
       this.opponentsPositions.add(to1dPos(p.col, p.row, this.mapSize.cols));
     }
+  }
+
+  calculateDirection(newPlayerPosition: Position) {
+    if (!this.lastPosition) {
+      this.lastPosition = newPlayerPosition;
+      return;
+    }
+    if (newPlayerPosition.row === this.lastPosition.row && newPlayerPosition.col === this.lastPosition.col) return;
+    if (newPlayerPosition.row === this.lastPosition.row) {
+      if (newPlayerPosition.col > this.lastPosition.col) {
+        this.currentDirection = PLAYER_DIRECTION.RIGHT;
+      } else {
+        this.currentDirection = PLAYER_DIRECTION.LEFT;
+      }
+    }
+    if (newPlayerPosition.col === this.lastPosition.col) {
+      if (newPlayerPosition.row > this.lastPosition.row) {
+        this.currentDirection = PLAYER_DIRECTION.DOWN;
+      } else {
+        this.currentDirection = PLAYER_DIRECTION.TOP;
+      }
+    }
+    this.lastPosition = newPlayerPosition;
   }
 
   getBombSpots(pos: number, playerId: string) {
@@ -173,6 +223,9 @@ export default class GameState {
           this.roadMap = [];
           this.recheckCanBomb(bombs);
         }
+      }
+      if (!this.hasMarried && tag === 'player:wedding-completed') {
+        this.hasMarried = true;
       }
       if (tag === 'player:moving-banned') {
         this.canMove = true;
@@ -323,7 +376,7 @@ export default class GameState {
 
   update(tempoGameState: TempoGameState) {
     const { map_info, tag, gameRemainTime, player_id } = tempoGameState;
-    const { size, players, map, spoils, bombs } = map_info;
+    const { size, players, map, spoils, bombs, weaponPlaces } = map_info;
 
     if (!this.gameStart) {
       this.canMove = true;
@@ -353,6 +406,7 @@ export default class GameState {
     this.updateMaps(map);
     this.updateOpponents(players, [PLAYER_ID]);
     this.updateBombs(bombs);
+    this.checkWeaponDropped(weaponPlaces);
     const currentPlayer = this.players[PLAYER_ID];
     const currentPlayerPosition = currentPlayer?.currentPosition;
     const currentPlayerPosition1P = to1dPos(currentPlayerPosition.col, currentPlayerPosition.row, this.mapSize.cols);
@@ -361,6 +415,10 @@ export default class GameState {
     switch (action) {
       case ACTIONS.RUNNING: {
         drive(path);
+        break;
+      }
+      case ACTIONS.USE_SPECIAL_SKILL: {
+        emitUseSpecialSkill();
         break;
       }
       case ACTIONS.BOMBED: {
@@ -451,88 +509,116 @@ export default class GameState {
       }
     }
 
-    if (this.roadMap[0] === currentPositionFlat) {
-      this.roadMap.shift();
-      this.idleStart = Date.now();
-
-      if (this.roadMap.length === 0) {
-        this.recheckCanBomb(this.rawBombs);
+    if (!this.gameLocked) {
+      this.gameLocked = true;
+      const shouldUseSpecialWeapon =
+        myPlayer.hasTransform &&
+        this.hasMarried &&
+        myPlayer.haveSpecialWeapon &&
+        myPlayer.timeToUseSpecialWeapons > 0 &&
+        Date.now() - this.lastCalculateSpecialSkill > 1500 &&
+        Date.now() - this.lastUseSpecialSkillTime > 6000 &&
+        this.canUseSpecialSkill(myPlayer.currentPosition);
+      if (shouldUseSpecialWeapon) {
+        this.lastUseSpecialSkillTime = Date.now();
+        setTimeout(() => {
+          this.gameLock = false;
+        }, 2000);
+        return { action: ACTIONS.USE_SPECIAL_SKILL, path: null };
       }
-    }
+      if (this.roadMap[0] === currentPositionFlat) {
+        this.roadMap.shift();
+        this.idleStart = Date.now();
 
-    if (this.roadMap.length && Date.now() - this.idleStart > TIME_IN_ONE_CELL) {
-      console.log('idling... reset the destination');
-      this.roadMap = [];
-      this.recheckCanBomb(this.rawBombs);
-    }
-
-    if (this.waitForNextStop && Date.now() - this.haltSignalTime > TIME_IN_ONE_CELL) {
-      this.waitForNextStop = false;
-      this.roadMap = [];
-      this.recheckCanBomb(this.rawBombs);
-    }
-
-    // COLLECT SPOIL
-    // const spoilPath = this.findSpoilAndPath(this.maps, currentPosition, this.spoils);
-    // if (spoilPath) {
-    //   return {
-    //     action: ACTIONS.RUNNING,
-    //     path: spoilPath.path
-    //   };
-    // }
-    if (!this.players[PLAYER_ID].hasTransform) {
-      return {
-        action: ACTIONS.NO_ACTION,
-        path: null
-      };
-    }
-    // SETUP BOMB
-    if (!this.roadMap.length) {
-      const isInDanger = this.bombSpots.has(currentPositionFlat);
-      if (isInDanger) {
-        const node = this.gotoSafePlace();
-        if (node) {
-          const path = getPathFromRoot(node);
-          this.storeRoadMap([node]);
-          return {
-            action: ACTIONS.RUNNING,
-            path
-          };
+        if (this.roadMap.length === 0) {
+          this.recheckCanBomb(this.rawBombs);
         }
       }
-      if (this.canBomb) {
-        const node = this.findOptimalBombPosition(currentPosition);
-        console.log('go here');
-        if (node) {
-          const extendPath = this.findSafePlace(
-            node.val,
-            new Set([...this.getBombSpots(node.val, PLAYER_ID), ...this.bombSpots]),
-            node.distance
-          );
-          if (extendPath) {
-            let direction = getPathFromRoot(node);
-            const tailPath = getPathFromRoot(extendPath);
-            // drive(direction + 'b' + tailPath);
-            this.storeRoadMap([extendPath, node]);
-            return { action: ACTIONS.RUNNING, path: direction + 'b' + tailPath };
+
+      if (this.roadMap.length && Date.now() - this.idleStart > TIME_IN_ONE_CELL) {
+        console.log('idling... reset the destination');
+        this.roadMap = [];
+        this.recheckCanBomb(this.rawBombs);
+      }
+
+      if (this.waitForNextStop && Date.now() - this.haltSignalTime > TIME_IN_ONE_CELL) {
+        this.waitForNextStop = false;
+        this.roadMap = [];
+        this.recheckCanBomb(this.rawBombs);
+      }
+
+      // COLLECT SPOIL
+      // const spoilPath = this.findSpoilAndPath(this.maps, currentPosition, this.spoils);
+      // if (spoilPath) {
+      //   return {
+      //     action: ACTIONS.RUNNING,
+      //     path: spoilPath.path
+      //   };
+      // }
+      if (!this.players[PLAYER_ID].hasTransform) {
+        return {
+          action: ACTIONS.NO_ACTION,
+          path: null
+        };
+      }
+
+      // SETUP BOMB
+      if (!this.roadMap.length) {
+        const isInDanger = this.bombSpots.has(currentPositionFlat);
+        if (isInDanger) {
+          const node = this.gotoSafePlace();
+          if (node) {
+            const path = getPathFromRoot(node);
+            this.storeRoadMap([node]);
+            return {
+              action: ACTIONS.RUNNING,
+              path
+            };
+          }
+        }
+        // COLLECT WEAPON
+        if (this.weaponDropped) {
+          const node = this.goToTarget(this.weaponDropped, currentPositionFlat);
+          if (node) {
+            const path = getPathFromRoot(node);
+            this.storeRoadMap([node]);
+            return { action: ACTIONS.RUNNING, path };
+          }
+        }
+        if (this.canBomb) {
+          const node = this.findOptimalBombPosition(currentPosition);
+          if (node) {
+            const extendPath = this.findSafePlace(
+              node.val,
+              new Set([...this.getBombSpots(node.val, PLAYER_ID), ...this.bombSpots]),
+              node.distance
+            );
+            if (extendPath) {
+              let direction = getPathFromRoot(node);
+              const tailPath = getPathFromRoot(extendPath);
+              // drive(direction + 'b' + tailPath);
+              this.storeRoadMap([extendPath, node]);
+              return { action: ACTIONS.RUNNING, path: direction + 'b' + tailPath };
+            }
+          }
+        }
+        //Find good spot while idling
+        const goodSpot = this.findGoodSpot(currentPositionFlat);
+        if (goodSpot) {
+          console.log('good spot');
+          const path = getPathFromRoot(goodSpot);
+          if (path) {
+            this.storeRoadMap([goodSpot]);
+            return { action: ACTIONS.RUNNING, path };
           }
         }
       }
-      //Find good spot while idling
-      const goodSpot = this.findGoodSpot(currentPositionFlat);
-      if (goodSpot) {
-        console.log('good spot');
-        const path = getPathFromRoot(goodSpot);
-        if (path) {
-          this.storeRoadMap([goodSpot]);
-          return { action: ACTIONS.RUNNING, path };
-        }
-      }
+      this.gameLocked = false;
     }
     return { action: ACTIONS.RUNNING, path: null };
   }
 
-  scanRawMap(startNode: TreeNode, map: FlatMap, callback: (node: TreeNode) => [boolean | null, boolean]) {
+  scanRawMap(startNode: TreeNode, map: FlatMap, callback: (node: TreeNode) => [TreeNode | null, boolean]) {
     const queue = [startNode];
     const visited = new Set([startNode.val]);
     while (queue.length) {
@@ -591,7 +677,7 @@ export default class GameState {
         }
 
         if (--limit <= 0) {
-          return [true, false];
+          return [currentNode, false];
         }
       }
       return [null, false];
@@ -619,7 +705,6 @@ export default class GameState {
   }
 
   gotoSafePlace() {
-    console.log('Go to safe place');
     const myPlayer = this.players[PLAYER_ID];
     const currentPosition = to1dPos(myPlayer.currentPosition.col, myPlayer.currentPosition.row, this.mapSize.cols);
     const root = this.createTreeNode(currentPosition, null, null);
@@ -949,5 +1034,130 @@ export default class GameState {
       }
     }
     return goodSpot;
+  }
+
+  canUseSpecialSkill(playerPosition: Position) {
+    this.lastCalculateSpecialSkill = Date.now();
+    let shouldAttack = false;
+    const barriers = [TILE_TYPE.BRICK_WALL, TILE_TYPE.BALK, TILE_TYPE.WALL];
+    const mapWidth = this.mapSize.cols;
+    if (this.currentDirection === PLAYER_DIRECTION.LEFT || this.currentDirection === PLAYER_DIRECTION.RIGHT) {
+      this.opponentsPositions.forEach(oPosition => {
+        const currentRow = playerPosition.row;
+        let max = (currentRow + 2) * this.mapSize.cols;
+        let min = max - 3 * this.mapSize.cols;
+        if (oPosition >= min && oPosition <= max) {
+          let pos: number | null = to1dPos(playerPosition.col, playerPosition.row, mapWidth);
+          if (oPosition <= currentRow * mapWidth) {
+            pos -= mapWidth;
+          } else if (oPosition > (currentRow + 1) * mapWidth) {
+            pos += mapWidth;
+          }
+
+          if (
+            (this.currentDirection === PLAYER_DIRECTION.LEFT && oPosition < pos) ||
+            (this.currentDirection === PLAYER_DIRECTION.RIGHT && oPosition > pos)
+          ) {
+            if (this.currentDirection === PLAYER_DIRECTION.LEFT) {
+              while (pos) {
+                if (barriers.includes(this.flatMap[pos]) || pos < oPosition) {
+                  pos = null;
+                  continue;
+                }
+                if (pos === oPosition) {
+                  shouldAttack = true;
+                  pos = null;
+                  break;
+                }
+                pos--;
+              }
+              return shouldAttack;
+            }
+            if (this.currentDirection === PLAYER_DIRECTION.RIGHT) {
+              while (pos) {
+                if (barriers.includes(this.flatMap[pos]) || pos > oPosition) {
+                  pos = null;
+                  continue;
+                }
+                if (pos === oPosition) {
+                  shouldAttack = true;
+                  pos = null;
+                  break;
+                }
+                pos++;
+              }
+              return shouldAttack;
+            }
+          }
+        }
+      });
+    }
+    if (this.currentDirection === PLAYER_DIRECTION.TOP || this.currentDirection === PLAYER_DIRECTION.DOWN) {
+      this.opponentsPositionsRaw.forEach(oPositionRaw => {
+        const oPosition = to1dPos(oPositionRaw.col, oPositionRaw.row, mapWidth);
+        const currentCol = playerPosition.col;
+        const currentRow = playerPosition.row;
+
+        if (oPositionRaw.col >= currentCol - 1 && oPositionRaw.col <= currentCol + 1) {
+          let pos: number | null = to1dPos(oPositionRaw.col, currentRow, mapWidth);
+          if (
+            (this.currentDirection === PLAYER_DIRECTION.TOP && oPositionRaw.row < currentRow) ||
+            (this.currentDirection === PLAYER_DIRECTION.DOWN && oPositionRaw.row > currentRow)
+          ) {
+            if (this.currentDirection === PLAYER_DIRECTION.TOP) {
+              while (pos) {
+                if (barriers.includes(this.flatMap[pos]) || pos < oPosition) {
+                  pos = null;
+                  continue;
+                }
+                if (pos === oPosition) {
+                  shouldAttack = true;
+                  pos = null;
+                  break;
+                }
+                pos -= mapWidth;
+              }
+              return shouldAttack;
+            }
+            if (this.currentDirection === PLAYER_DIRECTION.DOWN) {
+              while (pos) {
+                if (barriers.includes(this.flatMap[pos]) || pos > oPosition) {
+                  pos = null;
+                  continue;
+                }
+                if (pos === oPosition) {
+                  shouldAttack = true;
+                  pos = null;
+                  break;
+                }
+                pos += mapWidth;
+              }
+              return shouldAttack;
+            }
+          }
+        }
+      });
+    }
+    return shouldAttack;
+  }
+
+  goToTarget(target: Position, myPlayerPosition: number) {
+    const targetFlat = to1dPos(target.col, target.row, this.mapSize.cols);
+    const node = this.scanRawMap(this.createTreeNode(myPlayerPosition), this.flatMap, currentNode => {
+      const loc = currentNode.val;
+      if (this.opponentsPositions.has(loc)) {
+        return [null, true];
+      }
+      if (this.bombDangers.has(loc)) {
+        return [null, true];
+      }
+
+      if (currentNode.val === targetFlat) {
+        return [currentNode, false];
+      }
+
+      return [null, false];
+    });
+    return node;
   }
 }

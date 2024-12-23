@@ -11,6 +11,13 @@ export enum TILE_TYPE {
   SPOIL = 0.5
 }
 
+export enum PLAYER_DIRECTION {
+  LEFT = 1,
+  RIGHT = 2,
+  TOP = 3,
+  DOWN = 4
+}
+
 export enum MOVE_DIRECTION {
   LEFT = '1',
   RIGHT = '2',

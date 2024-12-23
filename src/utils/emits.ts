@@ -9,6 +9,17 @@ export const drive = (direction: string | null, characterType?: string) => {
     });
 };
 
+export const emitUseSpecialSkill = (distance: number = 10, characterType?: string) => {
+  socket.emit(EMITS.ACTIONS, {
+    action: EMIT_ACTIONS.USE_WEAPON,
+    characterType: {
+      distance
+    },
+    ...(characterType && { characterType })
+  });
+  drive('x');
+};
+
 export const emitSwitchWeapon = (characterType?: string) => {
   socket.emit(EMITS.ACTIONS, {
     action: EMIT_ACTIONS.SWITCH_WEAPON,

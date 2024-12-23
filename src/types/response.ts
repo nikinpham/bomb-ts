@@ -1,4 +1,4 @@
-import { Bomb, Maps, Spoil } from './game';
+import { Bomb, Maps, Spoil, WeaponPlace } from './game';
 import { Player } from './player';
 
 export type TempoGameState = {
@@ -15,6 +15,7 @@ export type TempoGameState = {
     spoils: Spoil[];
     gameStatus: string | null;
     weaponHammers: number[];
+    weaponPlaces: WeaponPlace[];
     cellSize: number;
   };
   tag: string;

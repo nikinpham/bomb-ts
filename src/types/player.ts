@@ -10,7 +10,7 @@ export type Player = {
   ownerWeapon: number[];
   currentWeapon: number;
   hasTransform: boolean;
-  timeToUseSpecialWeapon: number;
+  timeToUseSpecialWeapons: number;
   isStun: boolean;
   speed: number;
   power: number;
@@ -24,4 +24,5 @@ export type Player = {
   holySpiritStone: number;
   eternalBadge: number;
   brickWall: number;
+  haveSpecialWeapon: boolean;
 };

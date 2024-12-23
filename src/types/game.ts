@@ -58,3 +58,9 @@ export type TreeNode = {
   playerFootprint: boolean;
   children: TreeNode[];
 };
+
+export type WeaponPlace = {
+  playerId: string;
+  row: number;
+  col: number;
+};
