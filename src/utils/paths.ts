@@ -1,5 +1,7 @@
-import { Maps, Position, PositionWithValue } from '../types';
+import { FlatMap, Maps, Position, PositionWithValue, Spoil } from '../types';
 import { ACTIONS, DIRECTIONS, TILE_TYPE } from '../constants';
+import { start } from 'node:repl';
+import { isWithinRadius } from './utils';
 
 export const findEscapePath = (maps: Maps, start: Position) => {
   const numRows = maps.length;
@@ -108,4 +110,79 @@ export const findPathToTargets = (maps: Maps, limitTile: number[], start: Positi
     return { action: ACTIONS.RUNNING, path: stoppingPath.join('') };
   }
   return { action: ACTIONS.NO_ACTION, path: null };
+};
+
+export const isIsolatedBalk = (pos: number, flatMap: FlatMap, cols: number) => {
+  const surroundSpots = [
+    pos - 1,
+    pos + 1,
+    pos - cols,
+    pos - cols - 1,
+    pos - cols + 1,
+    pos + cols,
+    pos + cols - 1,
+    pos + cols + 1
+  ];
+
+  for (let spot of surroundSpots) {
+    if (flatMap[spot] === TILE_TYPE.BALK) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const findPathToSpoil = (map: Maps, start: Position, spoil: Spoil) => {
+  const directions = [
+    { dr: 0, dc: -1, move: '1' },
+    { dr: 0, dc: 1, move: '2' },
+    { dr: -1, dc: 0, move: '3' },
+    { dr: 1, dc: 0, move: '4' }
+  ];
+
+  const queue: any = [{ row: start.row, col: start.col, path: '' }];
+  const visited = Array.from({ length: map.length }, () => Array(map[0].length).fill(false));
+  visited[start.row][start.col] = true;
+
+  while (queue.length > 0) {
+    const { row, col, path } = queue.shift();
+    if (row === spoil.row && col === spoil.col) {
+      return path;
+    }
+
+    for (const { dr, dc, move } of directions) {
+      const newRow = row + dr;
+      const newCol = col + dc;
+
+      if (
+        newRow >= 0 &&
+        newRow < map.length &&
+        newCol >= 0 &&
+        newCol < map[0].length &&
+        !visited[newRow][newCol] &&
+        map[newRow][newCol] === TILE_TYPE.ROAD
+      ) {
+        queue.push({ row: newRow, col: newCol, path: path + move });
+        visited[newRow][newCol] = true;
+      }
+    }
+  }
+
+  return null;
+};
+
+export const findSpoilAndPath = (map: Maps, playerPosition: Position, spoils: Spoil[]) => {
+  const nearbySpoils = isWithinRadius(playerPosition, spoils, 7);
+  if (nearbySpoils.length === 0) {
+    return null;
+  }
+
+  for (const spoil of nearbySpoils) {
+    const path = findPathToSpoil(map, playerPosition, spoil);
+    if (path) {
+      return { spoil, path };
+    }
+  }
+
+  return null;
 };

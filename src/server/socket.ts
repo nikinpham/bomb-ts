@@ -3,11 +3,13 @@ import dotenv from 'dotenv';
 import { EMITS } from '../constants';
 import GameState from '../game/gameState';
 import { emitTrashTalk } from '../utils';
+import ChildGameState from '../game/childGameState';
 
 dotenv.config();
 
 const SOCKET_URL = process.env.SOCKET_URL || 'http://localhost';
 const gameState = new GameState();
+const childGameState = new ChildGameState();
 
 export const socket: Socket = ClientIO(SOCKET_URL, {
   transports: ['websocket'],
@@ -31,11 +33,10 @@ socket.on(EMITS.JOIN_GAME, res => {
 
 socket.on(EMITS.UPDATE, res => {
   gameState.update(res);
+  childGameState.update(res);
 });
 
 socket.on(EMITS.DRIVE, res => {
-  console.log(
-    `[Socket] drive-player responsed, res:  { direction: '${res.direction}', player_id: '${res.player_id}' }`
-  );
+  console.log(`Res:  { direction: '${res.direction}', player_id: '${res.player_id}' }`);
   gameState.onPlayerStop(res);
 });

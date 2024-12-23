@@ -1,5 +1,5 @@
 import { socket } from '../server';
-import { EMIT_ACTIONS, EMITS } from '../constants';
+import { EMIT_ACTIONS, EMITS, MOVE_DIRECTION } from '../constants';
 
 export const drive = (direction: string | null, characterType?: string) => {
   direction &&
@@ -17,7 +17,7 @@ export const emitUseSpecialSkill = (distance: number = 10, characterType?: strin
     },
     ...(characterType && { characterType })
   });
-  drive('x');
+  drive(MOVE_DIRECTION.STOP);
 };
 
 export const emitSwitchWeapon = (characterType?: string) => {

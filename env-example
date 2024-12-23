@@ -1,5 +1,6 @@
-#SOCKET_URL=http://localhost
-#PORT=3000
-#GAME_ID=b38d2db6-1a95-4fe8-8172-5400a666e1a8
-#PLAYER_ID=player1-xxx
-#MY_ID=player1-xxx
+SOCKET_URL=http://localhost
+PORT=3000
+GAME_ID=5c23daac-4442-442f-89f7-9a55fdb2f90f
+PLAYER_ID=player2-xxx
+PLAYER_ID_JOIN_GAME=player2-xxx
+KEY=64456f9b-9cc9-4b6a-83b4-f919736c63b9
