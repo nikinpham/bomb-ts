@@ -745,62 +745,78 @@ export default class GameState {
 
     const queue = [startNode];
     const visited = new Set<number>([playerPosition]);
-
-    while (queue.length > 0) {
-      queue.sort((a, b) => a.distance - b.distance);
-      const current: TreeNode = queue.shift()!;
-      const val = current.val;
-      if (this.opponentsPositions.has(val) || this.bombPositions.has(val)) {
-        continue;
-      }
-
-      if (this.bombMap.has(val)) {
-        const bombTime = this.bombMap.get(val)!;
-        if (!canWalkThrough(bombTime, current.distance)) {
+    const boundaries = [7, 17, 34, Infinity];
+    let i = 0;
+    let goodSpot = null;
+    while (i < boundaries.length - 1) {
+      const boundary = boundaries[i];
+      while (queue.length > 0) {
+        queue.sort((a, b) => a.distance - b.distance);
+        const current: TreeNode = queue.shift()!;
+        const val = current.val;
+        if (this.opponentsPositions.has(val) || this.bombPositions.has(val)) {
           continue;
         }
-      }
 
-      this.countBoxHits(current);
+        if (this.bombMap.has(val)) {
+          const bombTime = this.bombMap.get(val)!;
+          if (!canWalkThrough(bombTime, current.distance)) {
+            continue;
+          }
+        }
 
-      if (current.boxes > 0 || current.isolatedBoxes >= 1 || current.playerFootprint) {
-        attackSpots.push(current);
-      }
+        this.countBoxHits(current);
 
-      const neighbors = getNeighborNodes(val, this.mapSize.cols);
-      for (let idx in neighbors) {
-        const neighbor = neighbors[idx];
-        const cellValue = this.flatMap[neighbor];
-        if (cellValue === TILE_TYPE.ROAD) {
-          if (!visited.has(neighbor)) {
-            visited.add(neighbor);
-            const dir = parseInt(idx, 10) + 1;
-            const neighborNode = createTreeNode(neighbor, dir.toString(), current, this.spoilsPositions.has(neighbor));
-            current.children.push(neighborNode);
-            queue.push(neighborNode);
+        if (current.boxes > 0 || current.isolatedBoxes >= 1 || current.playerFootprint) {
+          attackSpots.push(current);
+        }
+
+        const neighbors = getNeighborNodes(val, this.mapSize.cols);
+        for (let idx in neighbors) {
+          const neighbor = neighbors[idx];
+          const cellValue = this.flatMap[neighbor];
+          if (cellValue === TILE_TYPE.ROAD) {
+            if (!visited.has(neighbor)) {
+              visited.add(neighbor);
+              const dir = parseInt(idx, 10) + 1;
+              const neighborNode = createTreeNode(
+                neighbor,
+                dir.toString(),
+                current,
+                this.spoilsPositions.has(neighbor)
+              );
+              if (neighborNode.distance > boundary) {
+                continue;
+              }
+              current.children.push(neighborNode);
+              queue.push(neighborNode);
+            }
           }
         }
       }
-    }
 
-    let goodSpot = null;
-    for (let spot of attackSpots) {
-      if (!goodSpot) {
-        goodSpot = spot;
-        continue;
+      for (let spot of attackSpots) {
+        if (!goodSpot) {
+          goodSpot = spot;
+          continue;
+        }
+        const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
+        if (
+          spot.distance < 8 &&
+          spot.playerFootprint &&
+          isAllowedAttack
+          // isUsingBomb
+        ) {
+          this.lastAttackTime = Date.now();
+          goodSpot = spot;
+          console.log('found opponent', to2dPos(goodSpot.val, this.mapSize.cols));
+          break;
+        }
       }
-      const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
-      if (
-        spot.distance < 8 &&
-        spot.playerFootprint &&
-        isAllowedAttack
-        // isUsingBomb
-      ) {
-        this.lastAttackTime = Date.now();
-        goodSpot = spot;
-        console.log('found opponent', to2dPos(goodSpot.val, this.mapSize.cols));
-        break;
+      if (goodSpot) {
+        return goodSpot;
       }
+      i++;
     }
     return goodSpot;
   }
@@ -808,7 +824,7 @@ export default class GameState {
   findGoodSpot(position: number) {
     const goodSpots = [];
     const badSpots = [];
-    let limitDistance = Infinity;
+    let limitDistance = 10;
     const map = this.flatMap;
     const startNode = createTreeNode(position);
     const queue = [startNode];
