@@ -18,7 +18,7 @@ export const createTreeNode = (
     parent,
     boxes: 0,
     isolatedBoxes: 0,
-    distance: parent ? parent.distance + (isSpoil ? 0.1 : 1) : 0,
+    distance: isSpoil ? 0.1 : parent ? parent.distance + 1 : 0,
     bonusPoints: parent ? parent.bonusPoints : 0,
     playerFootprint: false,
     children: []

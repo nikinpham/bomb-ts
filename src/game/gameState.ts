@@ -216,7 +216,7 @@ export default class GameState {
           this.recheckCanBomb(bombs);
         }
       }
-      if (!this.hasMarried && tag === TAGS.PLAYER_COMPLETED_WEDDING) {
+      if (!this.hasMarried && this.players[PLAYER_ID_CHILD]) {
         this.hasMarried = true;
       }
       if (tag === TAGS.PLAYER_MOVING_BANNED) {
@@ -506,7 +506,6 @@ export default class GameState {
         };
       }
     }
-
     if (!this.gameLocked) {
       this.gameLocked = true;
       const shouldUseSpecialWeapon =
@@ -519,9 +518,11 @@ export default class GameState {
         this.canUseSpecialSkill(myPlayer.currentPosition);
       if (shouldUseSpecialWeapon) {
         this.lastUseSpecialSkillTime = Date.now();
+        this.roadMap = [];
+        this.recheckCanBomb(this.rawBombs);
         setTimeout(() => {
-          this.gameLock = false;
-        }, 2000);
+          this.gameLocked = false;
+        }, 1000);
         return { action: ACTIONS.USE_SPECIAL_SKILL, path: null };
       }
       if (this.roadMap[0] === currentPositionFlat) {
@@ -615,8 +616,8 @@ export default class GameState {
           }
         }
       }
+      this.gameLocked = false;
     }
-    this.gameLocked = false;
     return { action: ACTIONS.RUNNING, path: null };
   }
 
@@ -994,10 +995,13 @@ export default class GameState {
     const targetFlat = to1dPos(target.col, target.row, this.mapSize.cols);
     return scanRawMap(createTreeNode(myPlayerPosition), this.flatMap, this.mapSize.cols, currentNode => {
       const loc = currentNode.val;
-      if (this.opponentsPositions.has(loc) || this.bombDangers.has(loc) || currentNode.val !== targetFlat) {
+      if (this.opponentsPositions.has(loc) || this.bombDangers.has(loc)) {
         return [null, true];
       }
-      return [currentNode, false];
+      if (currentNode.val === targetFlat) {
+        return [currentNode, false];
+      }
+      return [null, false];
     });
   }
 }
