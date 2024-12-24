@@ -57,8 +57,7 @@ export const checkTargetOpposite = (maps: Maps, position: Position, target: numb
 };
 
 export const to1dPos = (x: number, y: number, mapWidth: number) => {
-  const cols = mapWidth;
-  return y * cols + x;
+  return y * mapWidth + x;
 };
 
 export const canWalkThrough = (bombTime: number, distance: number) => {

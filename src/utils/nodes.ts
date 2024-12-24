@@ -6,14 +6,19 @@ export const getNeighborNodes = (val: number, mapWidth: number) => {
   return [val - 1, val + 1, val - cols, val + cols];
 };
 
-export const createTreeNode = (val: number, dir: string | null = null, parent: TreeNode | null = null): TreeNode => {
+export const createTreeNode = (
+  val: number,
+  dir: string | null = null,
+  parent: TreeNode | null = null,
+  isSpoil: boolean = false
+): TreeNode => {
   return {
     val,
     dir,
     parent,
     boxes: 0,
     isolatedBoxes: 0,
-    distance: parent ? parent.distance + 1 : 0,
+    distance: parent ? parent.distance + (isSpoil ? 0.1 : 1) : 0,
     bonusPoints: parent ? parent.bonusPoints : 0,
     playerFootprint: false,
     children: []

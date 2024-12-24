@@ -60,6 +60,7 @@ export default class GameState {
   private bombDangers = new Set<number>();
   private rottenBoxes = new Set<number>();
   private opponentsPositions = new Set<number>();
+  private spoilsPositions = new Set<number>();
   private opponentsPositionsRaw: Position[] = [];
   private tag: string | null = null;
   private godBadges: Position[] = [];
@@ -89,9 +90,6 @@ export default class GameState {
   private gameLocked: boolean = false;
   private currentDirection: PLAYER_DIRECTION = PLAYER_DIRECTION.DOWN;
   private lastPosition: Position | null = null;
-  //ONLY FOR TESTING
-  private lives: number = 5;
-
   setMapSize(cols: number, rows: number) {
     if (this.mapSize && this.mapSize.cols === cols && this.mapSize.rows === rows) {
       return;
@@ -211,7 +209,6 @@ export default class GameState {
 
   updateMapBaseOnTag(tag: string, playerId: string, bombs: Bomb[]) {
     if (PLAYER_ID.includes(playerId)) {
-      //console.log(tag, player_id, this.to2dPos(this.player.position));
       if (tag === TAGS.PLAYER_STOP_MOVING) {
         if (this.waitForNextStop) {
           this.waitForNextStop = false;
@@ -367,7 +364,7 @@ export default class GameState {
 
   update(tempoGameState: TempoGameState) {
     const { map_info, tag, gameRemainTime, player_id } = tempoGameState;
-    const { size, players, map, bombs, weaponPlaces } = map_info;
+    const { size, players, map, bombs, spoils, weaponPlaces } = map_info;
 
     if (!this.gameStart) {
       this.canMove = true;
@@ -380,7 +377,11 @@ export default class GameState {
 
     this.gameRemainTime = gameRemainTime;
     this.tag = tag;
-    // this.spoils = spoils;
+
+    this.spoilsPositions.clear();
+    spoils.forEach(spoil => {
+      this.spoilsPositions.add(to1dPos(spoil.col, spoil.row, this.mapSize.cols));
+    });
 
     // if (this.tag === TAGS.PLAYER_TRANSFORMED) {
     //   emitSwitchWeapon();
@@ -390,11 +391,8 @@ export default class GameState {
     players.forEach(player => {
       this.updatePlayerStats(player);
     });
-    ///
     const currentPlayer = this.players[PLAYER_ID];
-    this.lives = currentPlayer.lives;
     if (!currentPlayer) return;
-    ////
     this.updateMaps(map);
     this.updateOpponents(players, [PLAYER_ID]);
     this.updateBombs(bombs);
@@ -504,13 +502,13 @@ export default class GameState {
     }
 
     if (!this.gameLocked) {
-      // this.gameLocked = true;
+      this.gameLocked = true;
       const shouldUseSpecialWeapon =
         myPlayer.hasTransform &&
         this.hasMarried &&
         myPlayer.haveSpecialWeapon &&
         myPlayer.timeToUseSpecialWeapons > 0 &&
-        Date.now() - this.lastCalculateSpecialSkill > 1500 &&
+        Date.now() - this.lastCalculateSpecialSkill > 500 &&
         Date.now() - this.lastUseSpecialSkillTime > 6000 &&
         this.canUseSpecialSkill(myPlayer.currentPosition);
       if (shouldUseSpecialWeapon) {
@@ -550,6 +548,7 @@ export default class GameState {
       //   };
       // }
       if (!myPlayer.hasTransform) {
+        this.gameLocked = false;
         return {
           action: ACTIONS.NO_ACTION,
           path: null
@@ -564,6 +563,7 @@ export default class GameState {
           if (node) {
             const path = getPathFromRoot(node);
             this.storeRoadMap([node]);
+            this.gameLocked = false;
             return {
               action: ACTIONS.RUNNING,
               path
@@ -576,6 +576,7 @@ export default class GameState {
           if (node) {
             const path = getPathFromRoot(node);
             this.storeRoadMap([node]);
+            this.gameLocked = false;
             return { action: ACTIONS.RUNNING, path };
           }
         }
@@ -590,8 +591,8 @@ export default class GameState {
             if (extendPath) {
               let direction = getPathFromRoot(node);
               const tailPath = getPathFromRoot(extendPath);
-              // drive(direction + 'b' + tailPath);
               this.storeRoadMap([extendPath, node]);
+              this.gameLocked = false;
               return { action: ACTIONS.RUNNING, path: direction + MOVE_DIRECTION.BOMB + tailPath };
             }
           }
@@ -603,12 +604,13 @@ export default class GameState {
           const path = getPathFromRoot(goodSpot);
           if (path) {
             this.storeRoadMap([goodSpot]);
+            this.gameLocked = false;
             return { action: ACTIONS.RUNNING, path };
           }
         }
       }
-      // this.gameLocked = false;
     }
+    this.gameLocked = false;
     return { action: ACTIONS.RUNNING, path: null };
   }
 
@@ -727,6 +729,7 @@ export default class GameState {
   }
 
   findOptimalBombPosition(position: Position) {
+    // console.log(this.spoilsPositions);
     const attackSpots = [];
     const startRow = position.row;
     const startCol = position.col;
@@ -737,13 +740,10 @@ export default class GameState {
     const visited = new Set<number>([playerPosition]);
 
     while (queue.length > 0) {
+      queue.sort((a, b) => a.distance - b.distance);
       const current: TreeNode = queue.shift()!;
       const val = current.val;
-      if (this.opponentsPositions.has(val)) {
-        continue;
-      }
-
-      if (this.bombPositions.has(val)) {
+      if (this.opponentsPositions.has(val) || this.bombPositions.has(val)) {
         continue;
       }
 
@@ -775,6 +775,7 @@ export default class GameState {
         }
       }
     }
+
     let goodSpot = null;
     for (let spot of attackSpots) {
       if (!goodSpot) {
@@ -800,12 +801,7 @@ export default class GameState {
   findGoodSpot(position: number) {
     const goodSpots = [];
     const badSpots = [];
-
     let limitDistance = Infinity;
-    // if (this.pivotNode) {
-    //   limitDistance = this.pivotNode.distance + AroundPivotLimit;
-    // }
-
     const map = this.flatMap;
     const startNode = createTreeNode(position);
     const queue = [startNode];
@@ -818,10 +814,7 @@ export default class GameState {
         break;
       }
 
-      if (this.opponentsPositions.has(p)) {
-        continue;
-      }
-      if (p !== position && this.bombPositions.has(p)) {
+      if (this.opponentsPositions.has(p) && p !== position && this.bombPositions.has(p)) {
         continue;
       }
 
