@@ -8,8 +8,9 @@ import {
   TILE_TYPE,
   TIME_IN_ONE_CELL
 } from '../constants';
-import { Bomb, FlatMap, Map, Maps, Player, Position, TempoGameState, TreeNode } from '../types';
-import { canWalkThrough, drive, getPathFromRoot, to1dPos } from '../utils';
+import { Bomb, DrivePlayerResponse, FlatMap, Map, Maps, Player, Position, TempoGameState, TreeNode } from '../types';
+import { canWalkThrough, drive, getPathFromRoot, isIsolatedBalk, to1dPos, to2dPos } from '../utils';
+import { checkForGoodSpot, createTreeNode, getNeighborNodes, scanRawMap } from '../utils/nodes';
 
 const PLAYER_ID = process.env.PLAYER_ID || 'player2-xxx';
 const PLAYER_ID_CHILD = PLAYER_ID + '_child';
@@ -24,24 +25,23 @@ export default class ChildGameState {
   };
   private maps: Maps = [];
   private flatMap: FlatMap = [];
-  private reachableCells = new Set<number>();
   private bombPositions = new Set<number>();
   private bombMap = new Map<number, number>();
   private bombSpots = new Set<number>();
   private bombDangers = new Set<number>();
   private rottenBoxes = new Set<number>();
   private opponentsPositions = new Set<number>();
+  private spoilsPositions = new Set<number>();
+  private opponentsPositionsRaw: Position[] = [];
   private bombs: Bomb[] = [];
   private rawBombs: Bomb[] = [];
   private roadMap: number[] = [];
-  private destinationStart = Date.now();
   private waitForNextStop: boolean = true;
 
   private isMoving: boolean = false;
   private canBomb: boolean = true;
   private canMove: boolean = false;
   private gameStart: boolean = false;
-  private gameLock: boolean = true;
   private oldOpponentBombs: number[] = [];
   private newOpponentBombs: number[] = [];
   private haltSignal: boolean = false;
@@ -67,10 +67,11 @@ export default class ChildGameState {
 
   updateOpponents(players: Player[], myPlayIds: string[] = []) {
     this.opponentsPositions = new Set<number>();
-
+    this.opponentsPositionsRaw = [];
     const opponents = players.filter(p => !myPlayIds.includes(p.id));
     for (let opponent of opponents) {
       const p = opponent.currentPosition;
+      this.opponentsPositionsRaw.push(p);
       this.opponentsPositions.add(to1dPos(p.col, p.row, this.mapSize.cols));
     }
   }
@@ -129,6 +130,15 @@ export default class ChildGameState {
     }
   }
 
+  onPlayerStop(res: DrivePlayerResponse) {
+    if (PLAYER_ID_CHILD.includes(res.player_id)) {
+      if (res.direction === MOVE_DIRECTION.STOP) {
+        this.haltSignal = false;
+        this.waitForNextStop = true;
+      }
+    }
+  }
+
   updateBombs(bombs: Bomb[]) {
     this.bombPositions = new Set();
     this.bombSpots = new Set();
@@ -172,18 +182,17 @@ export default class ChildGameState {
     const goodSpots = [];
 
     const map = this.flatMap;
-    const startNode = this.createTreeNode(position);
+    const startNode = createTreeNode(position);
     startNode.distance = initDistance;
     const queue = [startNode];
     const visited = new Set([position]);
     while (queue.length) {
+      queue.sort((a, b) => a.distance - b.distance);
       const currentNode = queue.shift()!;
       const val = currentNode.val;
 
-      if (this.opponentsPositions.has(val)) {
-        continue;
-      }
-      if (val !== position && this.bombPositions.has(val)) {
+      //console.log(this.to2dPos(p));
+      if (this.opponentsPositions.has(val) || (val !== position && this.bombPositions.has(val))) {
         continue;
       }
 
@@ -200,7 +209,7 @@ export default class ChildGameState {
         }
       }
 
-      const neighbors = this.getNeighborNodes(val, this.mapSize.cols);
+      const neighbors = getNeighborNodes(val, this.mapSize.cols);
       for (let idx in neighbors) {
         const neighbor = neighbors[idx];
         const cellValue = map[neighbor];
@@ -208,7 +217,12 @@ export default class ChildGameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = this.createTreeNode(neighbor, dir.toString(), currentNode);
+            const neighborNode = createTreeNode(
+              neighbor,
+              dir.toString(),
+              currentNode,
+              this.spoilsPositions.has(neighbor)
+            );
             currentNode.children.push(neighborNode);
             queue.push(neighborNode);
           }
@@ -239,7 +253,6 @@ export default class ChildGameState {
 
   storeRoadMap(nodes: TreeNode[]) {
     this.roadMap = [];
-    this.destinationStart = Date.now();
     for (let node of nodes) {
       let n: TreeNode | null = node;
       while (n) {
@@ -252,26 +265,29 @@ export default class ChildGameState {
   }
 
   update(tempoGameState: TempoGameState) {
-    const { map_info, tag, gameRemainTime, player_id } = tempoGameState;
-    const { size, players, map, spoils, bombs } = map_info;
+    const { map_info, tag, player_id } = tempoGameState;
+    const { size, players, map, bombs, spoils } = map_info;
 
     if (!this.gameStart) {
       this.canMove = true;
-      this.gameLock = false;
     }
     this.updateMapBaseOnTag(tag, player_id, bombs);
     this.gameStart = true;
 
     this.setMapSize(size.cols, size.rows);
 
+    this.spoilsPositions.clear();
+    spoils.forEach(spoil => {
+      this.spoilsPositions.add(to1dPos(spoil.col, spoil.row, this.mapSize.cols));
+    });
+
     players.forEach(player => {
       this.updatePlayerStats(player);
     });
     const currentPlayer = this.players[PLAYER_ID_CHILD];
     if (!currentPlayer) return;
-
     this.updateMaps(map);
-    this.updateOpponents(players, [PLAYER_ID_CHILD]);
+    this.updateOpponents(players, [PLAYER_ID_CHILD, PLAYER_ID]);
     this.updateBombs(bombs);
     const currentPlayerPosition1P = to1dPos(
       currentPlayer.currentPosition.col,
@@ -289,11 +305,13 @@ export default class ChildGameState {
         if (this.roadMap[0] === currentPlayerPosition1P) {
           this.roadMap.shift();
           this.idleStart = Date.now();
+
           if (this.roadMap.length === 0) {
             this.recheckCanBomb(bombs);
           }
         }
         if (this.roadMap.length && Date.now() - this.idleStart > TIME_IN_ONE_CELL) {
+          console.log('idling... reset the destination');
           this.roadMap = [];
           this.recheckCanBomb(bombs);
         }
@@ -349,6 +367,7 @@ export default class ChildGameState {
     }
 
     if (this.roadMap.length && Date.now() - this.idleStart > TIME_IN_ONE_CELL) {
+      console.log('idling... reset the destination');
       this.roadMap = [];
       this.recheckCanBomb(this.rawBombs);
     }
@@ -385,13 +404,14 @@ export default class ChildGameState {
             let direction = getPathFromRoot(node);
             const tailPath = getPathFromRoot(extendPath);
             this.storeRoadMap([extendPath, node]);
-            return { action: ACTIONS.RUNNING, path: direction + 'b' + tailPath };
+            return { action: ACTIONS.RUNNING, path: direction + MOVE_DIRECTION.BOMB + tailPath };
           }
         }
       }
       //Find good spot while idling
       const goodSpot = this.findGoodSpot(currentPositionFlat);
       if (goodSpot) {
+        console.log('good spot');
         const path = getPathFromRoot(goodSpot);
         if (path) {
           this.storeRoadMap([goodSpot]);
@@ -402,52 +422,16 @@ export default class ChildGameState {
     return { action: ACTIONS.RUNNING, path: null };
   }
 
-  scanRawMap(startNode: TreeNode, map: FlatMap, callback: (node: TreeNode) => [boolean | null, boolean]) {
-    const queue = [startNode];
-    const visited = new Set([startNode.val]);
-    while (queue.length) {
-      const currentNode = queue.shift()!;
-
-      if (callback) {
-        const [r, ignoreThisNode] = callback(currentNode);
-        if (ignoreThisNode) {
-          continue;
-        }
-        if (r) {
-          return r;
-        }
-      }
-
-      const neighbors = this.getNeighborNodes(currentNode.val, this.mapSize.cols);
-
-      for (let idx in neighbors) {
-        const neighbor = neighbors[idx];
-        const cellValue = map[neighbor];
-        if (cellValue === TILE_TYPE.ROAD && !visited.has(neighbor)) {
-          visited.add(neighbor);
-          const dir = parseInt(idx, 10) + 1;
-          const neighborNode = this.createTreeNode(neighbor, dir.toString(), currentNode);
-          currentNode.children.push(neighborNode);
-          queue.push(neighborNode);
-        }
-      }
-    }
-
-    return null;
-  }
-
   getAvoidBomb(startNode: TreeNode, map: number[], bombSpots: Set<number>) {
     const goodSpots = new Set<TreeNode>();
     let limit = 20;
-    this.scanRawMap(startNode, map, (currentNode: TreeNode) => {
+    scanRawMap(startNode, map, this.mapSize.cols, (currentNode: TreeNode) => {
       const loc = currentNode.val;
-      if (this.opponentsPositions.has(loc)) {
-        return [null, true];
-      }
-      if (startNode.val !== loc && this.bombPositions.has(loc)) {
-        return [null, true];
-      }
-      if (startNode.val !== loc && this.bombDangers.has(loc)) {
+      if (
+        this.opponentsPositions.has(loc) ||
+        (startNode.val !== loc && this.bombPositions.has(loc)) ||
+        (startNode.val !== loc && this.bombDangers.has(loc))
+      ) {
         return [null, true];
       }
       if (!bombSpots.has(loc)) {
@@ -459,7 +443,7 @@ export default class ChildGameState {
         }
 
         if (--limit <= 0) {
-          return [true, false];
+          return [currentNode, false];
         }
       }
       return [null, false];
@@ -488,9 +472,8 @@ export default class ChildGameState {
   gotoSafePlace() {
     const myPlayer = this.players[PLAYER_ID_CHILD];
     const currentPosition = to1dPos(myPlayer.currentPosition.col, myPlayer.currentPosition.row, this.mapSize.cols);
-    const root = this.createTreeNode(currentPosition, null, null);
-    let node = this.getAvoidBomb(root, this.flatMap, this.bombSpots);
-    return node;
+    const root = createTreeNode(currentPosition, null, null);
+    return this.getAvoidBomb(root, this.flatMap, this.bombSpots);
   }
 
   replaceBombExplosionOnMap() {
@@ -521,41 +504,6 @@ export default class ChildGameState {
     });
   }
 
-  createTreeNode(val: number, dir: string | null = null, parent: TreeNode | null = null): TreeNode {
-    return {
-      val,
-      dir,
-      parent,
-      boxes: 0,
-      isolatedBoxes: 0,
-      distance: parent ? parent.distance + 1 : 0,
-      bonusPoints: parent ? parent.bonusPoints : 0,
-      playerFootprint: false,
-      children: []
-    };
-  }
-
-  isIsolatedBalk(pos: number) {
-    const cols = this.mapSize.cols;
-    const surroundSpots = [
-      pos - 1,
-      pos + 1,
-      pos - cols,
-      pos - cols - 1,
-      pos - cols + 1,
-      pos + cols,
-      pos + cols - 1,
-      pos + cols + 1
-    ];
-
-    for (let spot of surroundSpots) {
-      if (this.flatMap[spot] === TILE_TYPE.BALK) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   countBoxHits(node: TreeNode) {
     const loc = node.val;
     const playerPower = this.players[PLAYER_ID_CHILD]?.power ?? 1;
@@ -571,7 +519,7 @@ export default class ChildGameState {
           break;
         }
         if (cellType === TILE_TYPE.BALK && !this.rottenBoxes.has(p)) {
-          if (this.isIsolatedBalk(p)) {
+          if (isIsolatedBalk(p, this.flatMap, this.mapSize.cols)) {
             isolatedBoxes += 1;
           } else {
             boxes += 1;
@@ -588,29 +536,21 @@ export default class ChildGameState {
     node.isolatedBoxes = isolatedBoxes;
   }
 
-  getNeighborNodes(val: number, mapWidth: number) {
-    const cols = mapWidth;
-    return [val - 1, val + 1, val - cols, val + cols];
-  }
-
   findOptimalBombPosition(position: Position) {
     const attackSpots = [];
     const startRow = position.row;
     const startCol = position.col;
     const playerPosition = to1dPos(startCol, startRow, this.mapSize.cols);
-    const startNode = this.createTreeNode(playerPosition);
+    const startNode = createTreeNode(playerPosition);
 
     const queue = [startNode];
     const visited = new Set<number>([playerPosition]);
 
     while (queue.length > 0) {
+      queue.sort((a, b) => a.distance - b.distance);
       const current: TreeNode = queue.shift()!;
       const val = current.val;
-      if (this.opponentsPositions.has(val)) {
-        continue;
-      }
-
-      if (this.bombPositions.has(val)) {
+      if (this.opponentsPositions.has(val) || this.bombPositions.has(val)) {
         continue;
       }
 
@@ -627,7 +567,7 @@ export default class ChildGameState {
         attackSpots.push(current);
       }
 
-      const neighbors = this.getNeighborNodes(val, this.mapSize.cols);
+      const neighbors = getNeighborNodes(val, this.mapSize.cols);
       for (let idx in neighbors) {
         const neighbor = neighbors[idx];
         const cellValue = this.flatMap[neighbor];
@@ -635,7 +575,7 @@ export default class ChildGameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = this.createTreeNode(neighbor, dir.toString(), current);
+            const neighborNode = createTreeNode(neighbor, dir.toString(), current, this.spoilsPositions.has(neighbor));
             current.children.push(neighborNode);
             queue.push(neighborNode);
           }
@@ -649,36 +589,26 @@ export default class ChildGameState {
         continue;
       }
       const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
-      if (
-        spot.distance < 20 &&
-        spot.playerFootprint &&
-        isAllowedAttack
-        // isUsingBomb
-      ) {
+      if (spot.distance < 8 && spot.playerFootprint && isAllowedAttack) {
         this.lastAttackTime = Date.now();
         goodSpot = spot;
+        console.log('found opponent', to2dPos(goodSpot.val, this.mapSize.cols));
         break;
       }
     }
     return goodSpot;
   }
 
-  checkForGoodSpot(spot: TreeNode, goodSpot: TreeNode) {
-    const points = spot.boxes * 0.7 + spot.bonusPoints * 0.2 * spot.isolatedBoxes * 0.5;
-    const goodSpotPoints = goodSpot.boxes * 0.7 + goodSpot.bonusPoints * 0.2 * goodSpot.isolatedBoxes * 0.5;
-    return goodSpotPoints < points;
-  }
-
   findGoodSpot(position: number) {
     const goodSpots = [];
     const badSpots = [];
-
     let limitDistance = Infinity;
     const map = this.flatMap;
-    const startNode = this.createTreeNode(position);
+    const startNode = createTreeNode(position);
     const queue = [startNode];
     const visited = new Set([position]);
     while (queue.length) {
+      queue.sort((a, b) => a.distance - b.distance);
       const currentNode = queue.shift()!;
       const p = currentNode.val;
 
@@ -686,10 +616,7 @@ export default class ChildGameState {
         break;
       }
 
-      if (this.opponentsPositions.has(p)) {
-        continue;
-      }
-      if (p !== position && this.bombPositions.has(p)) {
+      if (this.opponentsPositions.has(p) && p !== position && this.bombPositions.has(p)) {
         continue;
       }
 
@@ -714,7 +641,7 @@ export default class ChildGameState {
         }
       }
 
-      const neighbors = this.getNeighborNodes(currentNode.val, this.mapSize.cols);
+      const neighbors = getNeighborNodes(currentNode.val, this.mapSize.cols);
       for (let idx in neighbors) {
         const neighbor = neighbors[idx];
         const cellValue = map[neighbor];
@@ -722,7 +649,12 @@ export default class ChildGameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = this.createTreeNode(neighbor, dir.toString(), currentNode);
+            const neighborNode = createTreeNode(
+              neighbor,
+              dir.toString(),
+              currentNode,
+              this.spoilsPositions.has(neighbor)
+            );
             currentNode.children.push(neighborNode);
             queue.push(neighborNode);
           }
@@ -736,7 +668,7 @@ export default class ChildGameState {
         goodSpot = spot;
         continue;
       }
-      if (this.checkForGoodSpot(spot, goodSpot)) {
+      if (checkForGoodSpot(spot, goodSpot)) {
         goodSpot = spot;
       }
     }

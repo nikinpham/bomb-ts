@@ -33,10 +33,11 @@ socket.on(EMITS.JOIN_GAME, res => {
 
 socket.on(EMITS.UPDATE, res => {
   gameState.update(res);
-  // childGameState.update(res);
+  childGameState.update(res);
 });
 
 socket.on(EMITS.DRIVE, res => {
   // console.log(`Res:  { direction: '${res.direction}', player_id: '${res.player_id}' }`);
   gameState.onPlayerStop(res);
+  childGameState.onPlayerStop(res);
 });

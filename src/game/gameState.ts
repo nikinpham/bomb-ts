@@ -374,7 +374,7 @@ export default class GameState {
 
     if (!this.gameStart) {
       this.canMove = true;
-      this.gameLock = false;
+      this.gameLocked = false;
     }
     this.updateMapBaseOnTag(tag, player_id, bombs);
     this.gameStart = true;
@@ -400,7 +400,7 @@ export default class GameState {
     const currentPlayer = this.players[PLAYER_ID];
     if (!currentPlayer) return;
     this.updateMaps(map);
-    this.updateOpponents(players, [PLAYER_ID]);
+    this.updateOpponents(players, [PLAYER_ID, PLAYER_ID_CHILD]);
     this.updateBombs(bombs);
     this.checkWeaponDropped(weaponPlaces);
     const currentPlayerPosition1P = to1dPos(
