@@ -290,6 +290,7 @@ export default class GameState {
     const queue = [startNode];
     const visited = new Set([position]);
     while (queue.length) {
+      queue.sort((a, b) => a.distance - b.distance);
       const currentNode = queue.shift()!;
       const val = currentNode.val;
 
@@ -319,7 +320,12 @@ export default class GameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = createTreeNode(neighbor, dir.toString(), currentNode);
+            const neighborNode = createTreeNode(
+              neighbor,
+              dir.toString(),
+              currentNode,
+              this.spoilsPositions.has(neighbor)
+            );
             currentNode.children.push(neighborNode);
             queue.push(neighborNode);
           }
@@ -768,7 +774,7 @@ export default class GameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = createTreeNode(neighbor, dir.toString(), current);
+            const neighborNode = createTreeNode(neighbor, dir.toString(), current, this.spoilsPositions.has(neighbor));
             current.children.push(neighborNode);
             queue.push(neighborNode);
           }
@@ -784,7 +790,7 @@ export default class GameState {
       }
       const isAllowedAttack = Date.now() - this.lastAttackTime > 5000;
       if (
-        spot.distance < 20 &&
+        spot.distance < 8 &&
         spot.playerFootprint &&
         isAllowedAttack
         // isUsingBomb
@@ -807,6 +813,7 @@ export default class GameState {
     const queue = [startNode];
     const visited = new Set([position]);
     while (queue.length) {
+      queue.sort((a, b) => a.distance - b.distance);
       const currentNode = queue.shift()!;
       const p = currentNode.val;
 
@@ -847,7 +854,12 @@ export default class GameState {
           if (!visited.has(neighbor)) {
             visited.add(neighbor);
             const dir = parseInt(idx, 10) + 1;
-            const neighborNode = createTreeNode(neighbor, dir.toString(), currentNode);
+            const neighborNode = createTreeNode(
+              neighbor,
+              dir.toString(),
+              currentNode,
+              this.spoilsPositions.has(neighbor)
+            );
             currentNode.children.push(neighborNode);
             queue.push(neighborNode);
           }
